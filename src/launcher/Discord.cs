@@ -12,8 +12,8 @@ namespace Velkin {
 /// The connection lives on its own background thread for as long as the game runs; closing the pipe clears the activity.
 internal sealed class Presence : IDisposable {
     /// The project's own Discord application, so that every user gets the presence without setting anything.
-    /// Empty until it has been created on https://discord.com/developers/applications. Settings and VELKIN_DISCORD_APP_ID override it.
-    internal const string BuiltInAppId = "";
+    /// Created on https://discord.com/developers/applications (application « Velkin »). Settings and VELKIN_DISCORD_APP_ID override it.
+    internal const string BuiltInAppId = "1575914612610572458";
     internal const string LargeImage = "velkin";
     /// Discord listens on discord-ipc-0 to discord-ipc-9. Tests point this at a pipe of their own.
     internal static string PipePrefix = "discord-ipc-";
