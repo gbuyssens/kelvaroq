@@ -399,6 +399,10 @@ mod launcher {
             desktop_test("updatePolicy");
         }
         #[test]
+        fn discord_rich_presence() {
+            desktop_test("discord");
+        }
+        #[test]
         fn desktop_prefers_branded_engine() {
             desktop_test("engine");
         }

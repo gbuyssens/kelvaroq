@@ -215,5 +215,14 @@
   "copyWorkers": "Threads für Kopieren und Vergleichen",
   "pairedWaves": "Experimentelle Kopplung von 32-Lane-Waves",
   "featureYes": "Ja",
-  "featureNo": "Nein"
+  "featureNo": "Nein",
+  "discord": "Discord",
+  "discordToggle": "Meine Aktivität auf Discord anzeigen",
+  "discordGame": "Spielnamen anzeigen",
+  "discordAppId": "Discord-Application-ID",
+  "discordAppIdHelp": "Optional. Leer lassen, um die von Velkin zu verwenden.",
+  "discordNoId": "Discord zeigt nichts an, solange keine Application ID festgelegt ist.",
+  "discordBadId": "Eine Application ID ist eine Zahl mit 17 bis 20 Ziffern.",
+  "discordState": "Spielt mit Velkin {0}",
+  "discordHidden": "Ein Konsolenspiel"
 }

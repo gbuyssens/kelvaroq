@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.IO.Pipes;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 namespace Velkin {
 internal static class Checks {
@@ -76,6 +78,55 @@ internal static class Checks {
             throw;
         }
         throw new InvalidOperationException("Unexpected success");
+    }
+    static void Discord(string root,Preferences p) {
+        const string id = "123456789012345678";
+        Check(Presence.ValidAppId(id) && !Presence.ValidAppId("1234") && !Presence.ValidAppId("12345678901234567a") && !Presence.ValidAppId(null)
+            && !Presence.ValidAppId("\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668"));
+        p.discordAppId = "not a number"; Check(Presence.AppId(p) == Presence.AppId(new Preferences()));
+        p.discordAppId = id; Check(Presence.AppId(p) == id && Presence.Active(p));
+        p.discord = false; Check(!Presence.Active(p)); p.discord = true;
+        var frame = Presence.Frame(3,"{\"\u00e9\":1}"); var parsed = Presence.Read(new MemoryStream(frame));
+        Check(parsed.Key == 3 && parsed.Value == "{\"\u00e9\":1}" && BitConverter.ToInt32(frame,4) == frame.Length - 8);
+        var en = new Locale("en");
+        Func<string,bool,string> details = (title,show) => {
+            var command = Files.Json.Deserialize<Dictionary<string,object>>(Presence.Activity(title,show,en,42,7));
+            var args = (Dictionary<string,object>)command["args"]; Check((string)command["cmd"] == "SET_ACTIVITY" && (int)args["pid"] == 7);
+            return (string)((Dictionary<string,object>)args["activity"])["details"];
+        };
+        Check(details("Sample Game",true) == "Sample Game" && details("Sample Game",false) == en.T("discordHidden") && details(new string('x',300),true).Length == 128);
+
+        string config = Path.Combine(root,"MicrosoftGame.Config"), exe = Path.Combine(root,"bin","sample.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(exe)); File.WriteAllBytes(exe,new byte[0]);
+        File.WriteAllText(config,"<Game><ShellVisuals DefaultDisplayName='Sample Game'/><ExecutableList><Executable Name='bin/sample.exe'/></ExecutableList></Game>");
+        Check(Installation.Select(exe).Title == "Sample Game");
+        File.WriteAllText(config,"<Game><ShellVisuals DefaultDisplayName='ms-resource:Title'/><ExecutableList><Executable Name='bin/sample.exe'/></ExecutableList></Game>");
+        Check(Installation.Select(exe).Title == new DirectoryInfo(root).Name);
+
+        // A stand-in for the Discord client: handshake, READY, then the activity, then the clearing on exit.
+        Presence.PipePrefix = "velkin-test-" + Guid.NewGuid().ToString("N") + "-";
+        var frames = new List<KeyValuePair<int,string>>();
+        using (var server = new NamedPipeServerStream(Presence.PipePrefix + "0",PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous)) {
+            var fake = new Thread(delegate() {
+                try {
+                    server.WaitForConnection();
+                    frames.Add(Presence.Read(server));
+                    Presence.Write(server,1,"{\"cmd\":\"DISPATCH\",\"evt\":\"READY\"}");
+                    frames.Add(Presence.Read(server));
+                    Presence.Write(server,1,"{\"cmd\":\"SET_ACTIVITY\",\"evt\":null}");
+                    while (true) frames.Add(Presence.Read(server));
+                } catch (Exception) { }
+            }) { IsBackground = true };
+            fake.Start();
+            var presence = Presence.Begin(p,new Installation { Root = root, Title = "Sample Game" },en);
+            for (int i = 0; i < 100 && !presence.Shown; i++) Thread.Sleep(50);
+            Check(presence.Shown);
+            presence.Dispose();
+            Check(fake.Join(5000));
+        }
+        Check(frames.Count == 3 && frames[0].Key == 0 && frames[0].Value.Contains(id) && frames[1].Value.Contains("Sample Game")
+            && frames[2].Value.Contains("\"activity\":null"));
+        p.discord = false; Check(!Presence.Begin(p,new Installation { Root = root, Title = "x" },en).Shown);
     }
     internal static void Run(string suite,string root) {
         string home = Path.Combine(root,"preferences"), history = Path.Combine(home,"snapshots");
@@ -227,6 +278,9 @@ internal static class Checks {
                     Reject(() => Archives.Restore(damaged,p,history,"def"));
                     Check(File.ReadAllText(save) == "second" && !File.Exists(Path.Combine(root,"escape")));
                 }
+                break;
+            case "discord":
+                Discord(root,p);
                 break;
             default: throw new ArgumentException(suite);
         }

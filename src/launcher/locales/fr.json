@@ -215,5 +215,14 @@
   "copyWorkers": "Threads de copie et de comparaison",
   "pairedWaves": "Appariement expérimental de vagues de 32 lignes",
   "featureYes": "Oui",
-  "featureNo": "Non"
+  "featureNo": "Non",
+  "discord": "Discord",
+  "discordToggle": "Afficher mon activité sur Discord",
+  "discordGame": "Afficher le nom du jeu",
+  "discordAppId": "Application ID Discord",
+  "discordAppIdHelp": "Facultatif. Laissez vide pour utiliser celui de Velkin.",
+  "discordNoId": "Rien ne s'affiche sur Discord tant qu'aucun Application ID n'est défini.",
+  "discordBadId": "Un Application ID est un nombre de 17 à 20 chiffres.",
+  "discordState": "Joue avec Velkin {0}",
+  "discordHidden": "Un jeu console"
 }

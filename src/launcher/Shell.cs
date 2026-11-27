@@ -218,6 +218,7 @@ internal sealed class Shell : Window {
         var options = Card("options");
         Row(options,T("monitor"),null,Text(T(prefs.monitor && Product.Enabled("VICTORY_LAUNCHER_MONITOR") ? "on" : "off"),14,Muted));
         Row(options,T("preload"),null,Text(T(prefs.preload && Product.PreloadAllowed ? "on" : "off"),14,Muted));
+        Row(options,T("discord"),null,Text(T(Presence.Active(prefs) ? "on" : "off"),14,Muted));
         if (hardware != null) Detected();
     }
 
@@ -254,7 +255,8 @@ internal sealed class Shell : Window {
             bool snapshots = Product.Enabled("VICTORY_SAVE_HISTORY") && Product.Enabled("VICTORY_SAVE_SNAPSHOTS");
             string error = "";
             ExitStatus = Session.Run(prefs,history,BuildId,snapshots,delegate {
-                using (var child = Process.Start(command)) {
+                using (var child = Process.Start(command))
+                using (Presence.Begin(prefs,game,locale)) {
                     error = child.StandardError.ReadToEnd(); child.WaitForExit(); return child.ExitCode;
                 }
             });
@@ -277,9 +279,39 @@ internal sealed class Shell : Window {
             check.Click += delegate { Guard(delegate { if (monitor) prefs.monitor = check.IsChecked == true; else prefs.preload = check.IsChecked == true; Persist(); }); };
             options.Children.Add(check);
         }
+        DiscordSettings();
         if (Product.Enabled("VICTORY_LAUNCHER_UPDATES")) UpdateControls(true);
         if (demo || Product.Enabled("VICTORY_LAUNCHER_I18N")) LanguageSettings();
         if (demo || Product.Enabled("VICTORY_SAVE_HISTORY")) { var retention = Card("retention"); Count(retention,true); Count(retention,false); }
+    }
+    void DiscordSettings() {
+        var card = Card("discord");
+        bool allowed = Presence.Allowed;
+        var show = new CheckBox { Content = T("discordToggle"), Foreground = Ink, IsChecked = prefs.discord && allowed, IsEnabled = allowed,
+            VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(0,5,0,5) };
+        var game = new CheckBox { Content = T("discordGame"), Foreground = Ink, IsChecked = prefs.discordGame, IsEnabled = allowed && prefs.discord,
+            VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(24,5,0,5) };
+        show.Click += delegate { Guard(delegate { prefs.discord = show.IsChecked == true; game.IsEnabled = prefs.discord; Persist(); }); };
+        game.Click += delegate { Guard(delegate { prefs.discordGame = game.IsChecked == true; Persist(); }); };
+        card.Children.Add(show); card.Children.Add(game);
+        var id = new TextBox { Width = 200, Text = prefs.discordAppId ?? "", IsEnabled = allowed, Padding = new Thickness(4,3,4,3),
+            Background = Panel, Foreground = Ink, BorderBrush = Edge, VerticalContentAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetName(id,T("discordAppId"));
+        Row(card,T("discordAppId"),T("discordAppIdHelp"),id);
+        var note = Text("",13,Muted); card.Children.Add(note);
+        Action explain = delegate {
+            string typed = id.Text.Trim();
+            bool bad = typed.Length > 0 && !Presence.ValidAppId(typed);
+            note.Foreground = bad ? B("#894419","#ffcd93") : Muted;
+            note.Text = bad ? T("discordBadId") : typed.Length == 0 && Presence.AppId(prefs) == null ? T("discordNoId") : "";
+        };
+        id.LostFocus += delegate { Guard(delegate {
+            string typed = id.Text.Trim();
+            if (typed.Length == 0 || Presence.ValidAppId(typed)) { prefs.discordAppId = typed.Length == 0 ? null : typed; Persist(); }
+            explain();
+        }); };
+        id.TextChanged += delegate { explain(); };
+        explain();
     }
     void ProfileSettings() {
         var card = Card("hardwareProfile");
