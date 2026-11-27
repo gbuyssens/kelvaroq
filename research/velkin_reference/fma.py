@@ -16,9 +16,7 @@ class FmaBlock(ctypes.Structure):
 @cache
 def native_library(path):
     if not path:
-        raise GuestFault(
-            "native arithmetic requires the library from the Velkin build"
-        )
+        raise GuestFault("native arithmetic requires the library from the Velkin build")
     try:
         return ctypes.CDLL(path)
     except OSError as error:

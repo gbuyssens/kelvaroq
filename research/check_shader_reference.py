@@ -216,9 +216,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("--reference", required=True, type=Path)
-    parser.add_argument(
-        "--cli", type=Path, default=ROOT / "target/release/velkin.exe"
-    )
+    parser.add_argument("--cli", type=Path, default=ROOT / "target/release/velkin.exe")
     parser.add_argument(
         "--pipelines",
         action="store_true",

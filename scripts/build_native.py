@@ -58,7 +58,9 @@ def install_render_source(checkout, crate):
     # staged source lock in step with the local crate included in this ZIP.
     lock = checkout / "Cargo.lock"
     if lock.is_file():
-        version = tomllib.loads((dest / "Cargo.toml").read_text("utf8"))["package"]["version"]
+        version = tomllib.loads((dest / "Cargo.toml").read_text("utf8"))["package"][
+            "version"
+        ]
         data, count = re.subn(
             rb'(\[\[package\]\]\nname = "velkin-render"\nversion = ")[^"]+(")',
             lambda match: match[1] + version.encode("ascii") + match[2],
@@ -299,6 +301,4 @@ if __name__ == "__main__":
     result = run(
         str(args.source.resolve()) if args.source else UPSTREAM, args.output.resolve()
     )
-    print(
-        f"Installed {args.output} ({ENGINE} SHA-256 {result['sha256'][ENGINE]})"
-    )
+    print(f"Installed {args.output} ({ENGINE} SHA-256 {result['sha256'][ENGINE]})")

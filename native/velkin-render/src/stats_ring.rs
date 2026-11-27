@@ -138,8 +138,8 @@ impl Writer {
         for (i, n) in names.iter().enumerate() {
             let mut buf = [0; 32];
             buf[..n.len()].copy_from_slice(n.as_bytes());
-            for (j, part) in buf.chunks_exact(8).enumerate() {
-                words[8 + i * 4 + j].store(u64::from_le_bytes(part.try_into().unwrap()), Relaxed);
+            for (j, part) in buf.as_chunks::<8>().0.iter().enumerate() {
+                words[8 + i * 4 + j].store(u64::from_le_bytes(*part), Relaxed);
             }
         }
         words[0].store(MAGIC, Release);

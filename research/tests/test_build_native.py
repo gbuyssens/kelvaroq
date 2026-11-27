@@ -12,8 +12,8 @@ from scripts.build_native import (
     archive_source,
     checkout_source,
     git,
-    publish,
     install_render_source,
+    publish,
     sha256,
 )
 

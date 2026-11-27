@@ -66,9 +66,7 @@ def fetch_inputs():
             with dest.open("rb") as stream:
                 if hashlib.file_digest(stream, "sha256").hexdigest() == expected:
                     continue
-        request = urllib.request.Request(
-            url, headers={"User-Agent": "Velkin packager"}
-        )
+        request = urllib.request.Request(url, headers={"User-Agent": "Velkin packager"})
         with urllib.request.urlopen(request, timeout=90) as response:
             content = response.read()
         if hashlib.sha256(content).hexdigest() != expected:
@@ -199,7 +197,11 @@ def package(archive, release, cache, metadata, native):
     put(archive, "LICENSE.txt", (ROOT / "LICENSE").read_bytes())
     put(archive, "RELEASE_NOTES.md", (ROOT / "RELEASE_NOTES.md").read_bytes())
     # The reference CPU module imports Unicorn (GPLv2 only): GPL-2.0-or-later.
-    put(archive, "runtime/velkin_reference/LICENSE", (ROOT / "research/LICENSE").read_bytes())
+    put(
+        archive,
+        "runtime/velkin_reference/LICENSE",
+        (ROOT / "research/LICENSE").read_bytes(),
+    )
     for module in sorted((ROOT / "research/velkin_reference").glob("*.py")):
         put(archive, "runtime/velkin_reference/" + module.name, module.read_bytes())
     with zipfile.ZipFile(cache / PYTHON) as python:
@@ -288,8 +290,15 @@ def verify(path):
             env=env,
         )
         subprocess.run(
-            [str(copied / "Velkin.exe"), "--ui-demo", "--capture", str(Path(tmp) / "screens")],
-            check=True, cwd=tmp, env=env,
+            [
+                str(copied / "Velkin.exe"),
+                "--ui-demo",
+                "--capture",
+                str(Path(tmp) / "screens"),
+            ],
+            check=True,
+            cwd=tmp,
+            env=env,
         )
         subprocess.run(
             [str(copied / "native/velkin-engine.exe"), "run", "--help"],
