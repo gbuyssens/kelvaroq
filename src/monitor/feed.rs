@@ -3,7 +3,6 @@
 
 use crate::preload::visual::t;
 use anyhow::{Context, Result, ensure};
-use velkin_render::stats_ring::{ABSENT, CAPACITY, Reader, Writer};
 use std::{
     collections::{HashMap, VecDeque},
     fs::File,
@@ -11,6 +10,7 @@ use std::{
     path::Path,
     time::{Duration, Instant},
 };
+use velkin_render::stats_ring::{ABSENT, CAPACITY, Reader, Writer};
 
 #[derive(Clone)]
 pub struct History {

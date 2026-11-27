@@ -122,7 +122,8 @@ mod tests {
 
     #[test]
     fn finds_the_packaged_engine_and_older_installations() -> Result<()> {
-        let folder = std::env::temp_dir().join(format!("velkin-engine-test-{}", std::process::id()));
+        let folder =
+            std::env::temp_dir().join(format!("velkin-engine-test-{}", std::process::id()));
         std::fs::create_dir(&folder)?;
         let legacy = folder.join("victory.exe");
         let current = folder.join("velkin-engine.exe");

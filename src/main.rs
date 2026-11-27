@@ -3,17 +3,17 @@ mod adapters;
 #[cfg(windows)]
 mod desktop;
 #[cfg(windows)]
-mod monitor;
-#[cfg(windows)]
 mod gpu;
 mod image;
 #[cfg(windows)]
+mod monitor;
+#[cfg(windows)]
 mod native;
+mod package;
 #[cfg(windows)]
 mod preload;
 #[cfg(windows)]
 mod preload_process;
-mod package;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
@@ -200,7 +200,10 @@ fn main() -> ExitCode {
     if let Some(result) = monitor::command() {
         return match result {
             Ok(()) => ExitCode::SUCCESS,
-            Err(e) => { eprintln!("{e:#}"); ExitCode::FAILURE }
+            Err(e) => {
+                eprintln!("{e:#}");
+                ExitCode::FAILURE
+            }
         };
     }
     match run(Args::parse()) {
