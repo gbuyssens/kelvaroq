@@ -1,9 +1,9 @@
 diff --git a/crates/victory-gpu/src/copystat.rs b/crates/victory-gpu/src/copystat.rs
-index cae74b2..10d732b 100644
+index 1b29422d416ef8538817fb54cfa05d67da475cbb..b4e8d631c86db8673457632eaa3ac73866569817 100644
 --- a/crates/victory-gpu/src/copystat.rs
 +++ b/crates/victory-gpu/src/copystat.rs
-@@ -137,6 +137,8 @@ pub(crate) enum C {
- const COUNTERS: usize = 80;
+@@ -162,6 +162,8 @@ const COUNTERS: usize = C::RefreshSkipped as usize + 1;
+ const _: () = assert!(COUNTERS <= 256, "the counters' array stays small");
  static COUNT: [AtomicU64; COUNTERS] = [const { AtomicU64::new(0) }; COUNTERS];
  
 +pub(crate) fn monitor_count(c: C) -> u64 { COUNT[c as usize].load(Relaxed) }
@@ -11,7 +11,7 @@ index cae74b2..10d732b 100644
  pub(crate) fn add(c: C, n: u64) {
      COUNT[c as usize].fetch_add(n, Relaxed);
  }
-@@ -1080,9 +1082,11 @@ pub(crate) fn log(frames: f64) {
+@@ -1140,9 +1142,11 @@ pub(crate) fn log(frames: f64) {
      static FAULTS: AtomicU64 = AtomicU64::new(0);
      let faults = page_faults();
      let faults = faults - FAULTS.swap(faults, Relaxed).min(faults);
@@ -25,10 +25,10 @@ index cae74b2..10d732b 100644
      let mb = |v: f64| v / 1e6;
      let ms = |v: f64| v / 1e3;
 diff --git a/crates/victory-gpu/src/draw.rs b/crates/victory-gpu/src/draw.rs
-index ce94786..9a4a872 100644
+index 54bc858812630ef3d6742f727c7b5d114f181bba..30a38d8142dff5a0503f850bb880d2605d149e97 100644
 --- a/crates/victory-gpu/src/draw.rs
 +++ b/crates/victory-gpu/src/draw.rs
-@@ -627,7 +627,8 @@ pub(crate) fn take_frame() -> Vec<String> {
+@@ -934,7 +934,8 @@ pub(crate) fn take_frame() -> Vec<String> {
  /// Draws, mesh dispatches and dispatches recorded but not run on the host
  /// (no host pipeline) since the last call.
  pub(crate) fn take_dropped() -> u64 {
@@ -38,7 +38,7 @@ index ce94786..9a4a872 100644
  }
  /// A root SRV's dynamic slot in a list, and the host copy it shows.
  type RootSlot = (u32, Option<std::sync::Arc<crate::shadow::Shadow>>);
-@@ -787,7 +788,7 @@ pub(crate) static HEAP_TEXTURES_QUEUE: [AtomicU64; 5] = [const { AtomicU64::new(
+@@ -1071,7 +1072,7 @@ pub(crate) static HEAP_TEXTURES_QUEUE: [AtomicU64; 5] = [const { AtomicU64::new(
  /// the ones whose first page was not there (asked by the first page alone,
  /// as before, they counted as not there at all).
  pub(crate) static HEAP_TEXTURES_PARTLY: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
@@ -47,85 +47,21 @@ index ce94786..9a4a872 100644
  
  /// Marks the last traced draw as not run on the host.
  #[cfg(feature = "diagnostics")]
-diff --git a/crates/victory-gpu/src/frame_wait.rs b/crates/victory-gpu/src/frame_wait.rs
-index 99b0500..cf1734e 100644
---- a/crates/victory-gpu/src/frame_wait.rs
-+++ b/crates/victory-gpu/src/frame_wait.rs
-@@ -28,6 +28,7 @@ struct Clock {
-     since: Instant,
-     stage: Stage,
-     spent: [Duration; 13],
-+    archived: [Duration; 13],
- }
- 
- impl Clock {
-@@ -45,7 +46,7 @@ impl Clock {
- #[test]
- fn a_submit_stage_excludes_a_nested_wait_at_the_frame_boundary() {
-     let start = Instant::now();
--    let mut clock = Clock { since: start, stage: Stage::Deferred, spent: Default::default() };
-+    let mut clock = Clock { since: start, stage: Stage::Deferred, spent: Default::default(), archived: Default::default() };
-     clock.tick_at(start + Duration::from_millis(3));
-     clock.stage = Stage::Landing;
-     clock.tick_at(start + Duration::from_millis(8));
-@@ -74,6 +75,7 @@ pub(crate) fn start_worker(relay: bool) {
-         since: Instant::now(),
-         stage: Stage::Work,
-         spent: Default::default(),
-+        archived: Default::default(),
-     });
-     WORKER.set(Some(worker));
- }
-@@ -112,6 +114,16 @@ pub(crate) fn submit_stage(next: Stage) -> SubmitStage {
-     SubmitStage(if on_worker && submit_stages() { stage(next) } else { None })
- }
- 
-+/// Read the worker without interrupting a stage or waiting on a busy lock.
-+pub(crate) fn monitor_worker(relay: bool) -> Option<[u64; 13]> {
-+    let worker = if relay { &RELAY } else { &SUBMIT };
-+    let held = worker.try_lock().ok()?;
-+    let clock = held.as_ref()?;
-+    let mut spent = clock.spent;
-+    spent[clock.stage as usize] += clock.since.elapsed();
-+    Some(std::array::from_fn(|i| (spent[i] + clock.archived[i]).as_micros() as u64))
-+}
-+
- static DRIVER_BATCHES: Mutex<(u64, u64)> = Mutex::new((0, 0));
- 
- pub(crate) fn executing(lists: usize) -> SubmitStage {
-@@ -172,6 +184,7 @@ impl Drop for Timer {
-         NS[self.0 as usize].fetch_add(ns, Ordering::Relaxed);
-         if matches!(self.0, Call::Present) {
-             IN_PRESENT.set(false);
-+            if crate::monitor::enabled() { crate::monitor::title_return(self.1, ns); }
-         }
-         let field = match self.0 {
-             Call::Present => 0,
-@@ -253,6 +266,9 @@ pub(crate) fn line(frames: f64) {
-         };
-         clock.tick();
-         let times = std::mem::take(&mut clock.spent);
-+        if crate::monitor::enabled() {
-+            for (sum, t) in clock.archived.iter_mut().zip(times) { *sum += t; }
-+        }
-         drop(guard);
-         let [other, idle, locks, card, landing, fetch, dependency, descriptors, watch, deferred, snapshots, setup, execute] =
-             times.map(|t| t.as_secs_f64() * 1e3 / frames);
 diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
-index 69b1373..bcd0d58 100644
+index 861b1ddb072f7048be2ea411d2b30f26f24237b1..253bd80b61221c39b7fb4c65534ae89bd8f4e9ac 100644
 --- a/crates/victory-gpu/src/host.rs
 +++ b/crates/victory-gpu/src/host.rs
-@@ -438,7 +438,8 @@ fn card_clock_watch(clock: &'static CardClock) {
+@@ -1159,7 +1159,8 @@ fn card_clock_watch(clock: &'static CardClock) {
  /// For the frame-rate line: [`CARD_CLOCK_US`] per frame, `ms` being the
  /// frame's time.
  fn card_clock_line(frames: f64, ms: f64) {
 -    let [idle, behind, stood] = [0, 1, 2].map(|i| CARD_CLOCK_US[i].swap(0, Ordering::Relaxed) as f64 / 1000.0 / frames);
-+    static LAST: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
++    static LAST: [std::sync::atomic::AtomicU64; 3] = [const { std::sync::atomic::AtomicU64::new(0) }; 3];
 +    let [idle, behind, stood] = [0, 1, 2].map(|i| crate::monitor::log_count(&CARD_CLOCK_US[i], &LAST[i]) as f64 / 1000.0 / frames);
      tracing::info!(
          "the card's clock per frame: nothing of ours queued {idle:.1} ms (the card about {:.0}% busy by this count), \
           {behind:.1} ms of that while the submitting thread was working (the card idle behind us), the rest while the title \
-@@ -4224,6 +4225,18 @@ impl Host {
+@@ -5819,6 +5820,18 @@ impl Host {
          Some(clock)
      }
  
@@ -144,7 +80,7 @@ index 69b1373..bcd0d58 100644
      /// Lists of ours just went to the queue: the clock's signal goes
      /// behind them, and an idle stretch of the card, if one was under way,
      /// ends here ([`CARD_CLOCK_US`]).
-@@ -8263,6 +8276,7 @@ struct Presenter {
+@@ -10962,6 +10975,7 @@ struct Presenter {
  /// The frame rate, shown in the window's caption every second and logged
  /// every few seconds.
  struct Meter {
@@ -152,7 +88,7 @@ index 69b1373..bcd0d58 100644
      since: std::time::Instant,
      frames: u32,
      #[cfg(feature = "diagnostics")]
-@@ -8277,6 +8291,7 @@ impl Meter {
+@@ -10976,6 +10990,7 @@ impl Meter {
      fn new() -> Self {
          let now = std::time::Instant::now();
          Meter {
@@ -160,59 +96,61 @@ index 69b1373..bcd0d58 100644
              since: now,
              frames: 0,
              #[cfg(feature = "diagnostics")]
-@@ -8760,8 +8775,14 @@ impl Host {
-             }
+@@ -11447,8 +11462,14 @@ impl Host {
+             // Said once (a status that is no error, as "occluded", is not).
              let timing = velkin_render::pacing::start_present();
-             let status = p.swap_chain.Present(0, DXGI_PRESENT(0));
+             let shown = p.swap_chain.Present(0, DXGI_PRESENT(0));
 -            if let Some(start) = timing {
--                velkin_render::pacing::present(frame, start, std::time::Instant::now(), status.0);
+-                velkin_render::pacing::present(frame, start, std::time::Instant::now(), shown.0);
 +            if timing.is_some() || p.meter.monitor.is_some() {
 +                let end = std::time::Instant::now();
 +                if let Some(monitor) = &mut p.meter.monitor {
-+                    monitor.present(self, frame, status.0, end);
++                    monitor.present(self, frame, shown.0, end);
 +                }
 +                if let Some(start) = timing {
-+                    velkin_render::pacing::present(frame, start, end, status.0);
++                    velkin_render::pacing::present(frame, start, end, shown.0);
 +                }
              }
-             p.meter.frame(p.hwnd);
-             #[cfg(feature = "diagnostics")]
+             if shown.is_err() {
+                 static ONCE: std::sync::Once = std::sync::Once::new();
 diff --git a/crates/victory-gpu/src/inplace.rs b/crates/victory-gpu/src/inplace.rs
-index 9479607..7c60946 100644
+index 050117463d101562f9f77f7a711c5638da8f2b81..7d12f9fb12c324389cc450abc242b87a2a1b3b2a 100644
 --- a/crates/victory-gpu/src/inplace.rs
 +++ b/crates/victory-gpu/src/inplace.rs
-@@ -141,6 +141,8 @@ pub(crate) fn skipped(requests: u64, bytes: u64) {
-     SKIPPED[1].fetch_add(bytes, Ordering::Relaxed);
- }
+@@ -104,6 +104,8 @@ fn most() -> u64 {
+ /// because of [`most`]; and what was let go because its memory changed.
+ static STATS: [AtomicU64; 8] = [const { AtomicU64::new(0) }; 8];
  
 +pub(crate) fn monitor_bytes() -> u64 { STATS[1].load(Ordering::Relaxed) + STATS[3].load(Ordering::Relaxed) }
 +
  /// A buffer placed over title memory, and its heap.
  pub(crate) struct Placed {
      pub(crate) buffer: ID3D12Resource,
-@@ -200,6 +202,7 @@ pub(crate) fn place_for(start: u64, len: u64, window: bool, read_only: bool) ->
-     match placed {
+@@ -151,6 +153,7 @@ pub(crate) fn place_for(start: u64, len: u64, window: bool) -> Option<Placed> {
+     match place_part(&host.device, start, len) {
          Ok(placed) => {
              let at = if window { 0 } else { 2 };
 +            if crate::monitor::enabled() { crate::monitor::placed_pages(start, len, true); }
              STATS[at].fetch_add(1, Ordering::Relaxed);
              STATS[at + 1].fetch_add(len, Ordering::Relaxed);
              Some(placed)
-@@ -222,6 +225,7 @@ pub(crate) fn gone(window: bool, start: u64, bytes: u64) {
-     if private_reads() {
-         OPEN_BYTES.fetch_sub(opening(start, bytes).unwrap().1, Ordering::Relaxed);
-     }
+@@ -169,7 +172,8 @@ pub(crate) fn place_for(start: u64, len: u64, window: bool) -> Option<Placed> {
+ }
+ 
+ /// What [`place_for`] gave is gone.
+-pub(crate) fn gone(window: bool, bytes: u64) {
++pub(crate) fn gone(window: bool, start: u64, bytes: u64) {
 +    if crate::monitor::enabled() { crate::monitor::placed_pages(start, bytes, false); }
      let at = if window { 0 } else { 2 };
      STATS[at].fetch_sub(1, Ordering::Relaxed);
      STATS[at + 1].fetch_sub(bytes, Ordering::Relaxed);
 diff --git a/crates/victory-gpu/src/lib.rs b/crates/victory-gpu/src/lib.rs
-index d60292a..da596eb 100644
+index afa3926bd89cba63677001062796edcf058a0a85..33a1cefa0753123daeff5cf34b5b3975da3926fa 100644
 --- a/crates/victory-gpu/src/lib.rs
 +++ b/crates/victory-gpu/src/lib.rs
-@@ -33,6 +33,8 @@ pub mod frame;
+@@ -52,6 +52,8 @@ mod gpudetile;
  #[cfg(windows)]
- mod frame_wait;
+ mod heap_worker;
  #[cfg(windows)]
 +mod monitor;
 +#[cfg(windows)]
@@ -220,10 +158,10 @@ index d60292a..da596eb 100644
  #[cfg(windows)]
  mod indirect;
 diff --git a/crates/victory-gpu/src/list.rs b/crates/victory-gpu/src/list.rs
-index 82c8141..f463121 100644
+index cb4a003812cf756f9a8f55e5c09a75bf4eed70fa..ddfba4f93885b3ed61bf1a7d1fb6e110a5037494 100644
 --- a/crates/victory-gpu/src/list.rs
 +++ b/crates/victory-gpu/src/list.rs
-@@ -1823,6 +1823,11 @@ extern "system" fn execute_indirect(
+@@ -1843,6 +1843,11 @@ extern "system" fn execute_indirect(
  
  /// Indirect executions dropped since the last call.
  pub(crate) fn take_indirect() -> u64 {
@@ -235,7 +173,7 @@ index 82c8141..f463121 100644
      INDIRECT.swap(0, std::sync::atomic::Ordering::Relaxed)
  }
  static INDIRECT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-@@ -1836,17 +1841,33 @@ extern "system" fn dispatch(_: This) {
+@@ -1856,17 +1861,33 @@ extern "system" fn dispatch(_: This) {
  static DRAWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
  static DISPATCHES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
  
@@ -272,17 +210,17 @@ index 82c8141..f463121 100644
  
 diff --git a/crates/victory-gpu/src/monitor.rs b/crates/victory-gpu/src/monitor.rs
 new file mode 100644
-index 0000000..dd6656a
+index 0000000000000000000000000000000000000000..ed39974bb865d81d835e688df53943e55749f2d7
 --- /dev/null
 +++ b/crates/victory-gpu/src/monitor.rs
-@@ -0,0 +1,426 @@
+@@ -0,0 +1,400 @@
 +//! Approach after XCL b86fba4: measure successful host flips and show pipeline
 +//! backlog alongside their cadence. Workers and the GPU overlap one another.
 +//! Approach after XCL 5a5c32b: keep guest frame tokens separate from flip times.
 +//! Deltas below cover the wall interval between flips, including work the
 +//! title has already recorded for a later frame.
 +
-+use crate::{draw, frame_wait, host::Host, pipeline, shadow};
++use crate::{draw, host::Host, pipeline, shadow};
 +use velkin_render::stats_ring::{ABSENT, FIELDS, Writer};
 +use std::cell::Cell;
 +use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
@@ -529,33 +467,8 @@ index 0000000..dd6656a
 +        put(monitor_prev_ns, self.cost);
 +        put(title_us, TITLE_NS.load(Relaxed) / 1000);
 +        put(present_us, PRESENT_NS.load(Relaxed) / 1000);
-+        if let Some(times) = frame_wait::monitor_worker(false) {
-+            for (field, n) in [
-+                submit_other_us,
-+                submit_idle_us,
-+                submit_lock_us,
-+                submit_card_us,
-+                relay_wait_us,
-+                submit_fetch_us,
-+                submit_dependency_us,
-+                descriptors_us,
-+                watch_us,
-+                deferred_us,
-+                snapshots_us,
-+                card_setup_us,
-+                execute_us,
-+            ]
-+            .into_iter()
-+            .zip(times)
-+            {
-+                put(field, n);
-+            }
-+        }
-+        if let Some(times) = frame_wait::monitor_worker(true) {
-+            put(relay_work_us, times[frame_wait::Stage::Work as usize]);
-+            put(relay_card_us, times[frame_wait::Stage::Card as usize]);
-+            put(relay_fetch_us, times[frame_wait::Stage::Fetch as usize]);
-+        }
++        // The submission worker's stage times came with a change of the
++        // present path the upstream one replaces: absent in this build.
 +        if let Some([n, pages]) = crate::watch::monitor_asks() {
 +            put(watch_calls, n);
 +            put(watch_pages, pages);
@@ -664,7 +577,6 @@ index 0000000..dd6656a
 +        let mut monitor = Recorder::open().expect("open synthetic publisher");
 +        let reader = velkin_render::stats_ring::Reader::open(std::process::id()).unwrap();
 +        let mut times = Vec::new();
-+        frame_wait::start_worker(false);
 +        for i in 1..=4096 {
 +            monitor.present(host, i, 0, Instant::now());
 +            times.push(monitor.cost);
@@ -703,10 +615,10 @@ index 0000000..dd6656a
 +    }
 +}
 diff --git a/crates/victory-gpu/src/pipeline.rs b/crates/victory-gpu/src/pipeline.rs
-index 7de66bf..418d6dc 100644
+index 1464610e1f445fb59428987c1173aec63afcb072..eea978ddc5de8510d7ec57ec52b117aa6ab6bd57 100644
 --- a/crates/victory-gpu/src/pipeline.rs
 +++ b/crates/victory-gpu/src/pipeline.rs
-@@ -499,6 +499,7 @@ pub(crate) fn note_drop(this: This) {
+@@ -602,6 +602,7 @@ pub(crate) fn note_drop(this: This) {
  /// Counts a draw or dispatch dropped for `why` (diagnostics).
  #[cfg(all(windows, feature = "diagnostics"))]
  pub(crate) fn note_why(why: String) {
@@ -715,24 +627,41 @@ index 7de66bf..418d6dc 100644
      let mut drops = DROPS.lock().unwrap_or_else(|e| e.into_inner());
      *drops.get_or_insert_with(HashMap::new).entry(why).or_default() += 1;
 diff --git a/crates/victory-gpu/src/pipeline/make.rs b/crates/victory-gpu/src/pipeline/make.rs
-index 836da93..61ba4d3 100644
+index b95966f5e2a786e1ae76ee79f028c0a0edceae4f..7c932bd947237f7f0782582ca2eff2058a2db36b 100644
 --- a/crates/victory-gpu/src/pipeline/make.rs
 +++ b/crates/victory-gpu/src/pipeline/make.rs
-@@ -386,6 +386,9 @@ fn wait(p: &Pending, frame: u64) {
-             }
+@@ -398,6 +398,9 @@ fn wait(p: &Pending, frame: u64) {
          }
      }
+     crate::framelog::add(crate::framelog::T::PipelineWaitUs, started.elapsed().as_micros() as u64);
 +    if crate::monitor::enabled() {
 +        crate::monitor::PIPELINE_WAIT_US.fetch_add(started.elapsed().as_micros() as u64, Ordering::Relaxed);
 +    }
      #[cfg(feature = "diagnostics")]
      crate::copystat::add(
          crate::copystat::C::PipelineWaitUs,
+diff --git a/crates/victory-gpu/src/queue.rs b/crates/victory-gpu/src/queue.rs
+index 25e4b5dbdae27334b171dc1a31a68fd69919c672..8cbeab8ea41d00f08615469d8e438145ef4be074 100644
+--- a/crates/victory-gpu/src/queue.rs
++++ b/crates/victory-gpu/src/queue.rs
+@@ -1380,7 +1380,11 @@ extern "system" fn present(
+     let hr = present_now(this, planes, plane_parameters);
+     #[cfg(windows)]
+     {
+-        crate::framelog::add(crate::framelog::T::PresentUs, presenting.elapsed().as_micros() as u64);
++        let spent = presenting.elapsed();
++        crate::framelog::add(crate::framelog::T::PresentUs, spent.as_micros() as u64);
++        if crate::monitor::enabled() {
++            crate::monitor::title_return(presenting, spent.as_nanos() as u64);
++        }
+         crate::framelog::frame();
+         #[cfg(feature = "diagnostics")]
+         crate::fence::pace::frame();
 diff --git a/crates/victory-gpu/src/shadow.rs b/crates/victory-gpu/src/shadow.rs
-index 98cd902..df00645 100644
+index 3894f74a36b94f07f5cf67a0dc0dcf683437c513..c22a47d81dedb7f2bccb32b6dbfdfbafe9f1e59c 100644
 --- a/crates/victory-gpu/src/shadow.rs
 +++ b/crates/victory-gpu/src/shadow.rs
-@@ -243,8 +243,9 @@ pub(crate) static CARD_STATS: [AtomicU64; 7] = [const { AtomicU64::new(0) }; 7];
+@@ -344,8 +344,9 @@ pub(crate) static CARD_STATS: [AtomicU64; 7] = [const { AtomicU64::new(0) }; 7];
  /// bytes and their "before" twins' bytes.
  pub(crate) fn card_stats() -> [u64; 10] {
      let mut out = [0u64; 10];
@@ -741,41 +670,31 @@ index 98cd902..df00645 100644
 -        out[i] = stat.swap(0, Ordering::Relaxed);
 +        out[i] = crate::monitor::log_count(stat, &LAST[i]);
      }
-     out[7] = CARDED.lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|w| w.strong_count() > 0).count() as u64;
-     out[8] = CARD_BYTES[0].load(Ordering::Relaxed)
+     out[7] = {
+         let mut carded = CARDED.lock().unwrap_or_else(|e| e.into_inner());
+@@ -3047,7 +3048,7 @@ impl Drop for Shadow {
+     fn drop(&mut self) {
+         if self.place.is_some() {
+             // Never counted with the copies (`Shadow::placed`).
+-            crate::inplace::gone(self.window, self.len);
++            crate::inplace::gone(self.window, self.start, self.len);
+             return;
+         }
+         LIVE[0].fetch_sub(1, Ordering::Relaxed);
 diff --git a/crates/victory-gpu/src/watch.rs b/crates/victory-gpu/src/watch.rs
-index a646ddc..447d782 100644
+index 65f31c5e58f0f1b2da88701df9ad8ce143466630..1df5b139293020db23513f9ece061b3b849e183c 100644
 --- a/crates/victory-gpu/src/watch.rs
 +++ b/crates/victory-gpu/src/watch.rs
-@@ -117,13 +117,30 @@ fn by_reservation() -> bool {
-     *ON.get_or_init(|| std::env::var_os("VICTORY_WATCH_RESERVATION").is_none_or(|v| v != "0"))
- }
+@@ -93,6 +93,12 @@ static JOURNAL: Mutex<Journal> = Mutex::new(Journal {
+     kept: false,
+ });
  
-+static LOGGED_ASKS: [std::sync::atomic::AtomicU64; 2] = [const { std::sync::atomic::AtomicU64::new(0) }; 2];
-+
++/// Kernel write-watch askings for the launcher's monitor: not counted in
++/// this build (the counting came with a change the upstream asking replaces).
 +pub(crate) fn monitor_asks() -> Option<[u64; 2]> {
-+    if !count_asks() { return None; }
-+    let j = JOURNAL.try_lock().ok()?;
-+    let sums = [j.stats.calls.iter().sum::<u64>(), j.stats.pages.iter().sum()];
-+    Some(std::array::from_fn(|i| sums[i] + LOGGED_ASKS[i].load(std::sync::atomic::Ordering::Relaxed)))
++    None
 +}
 +
- /// Taken on the one-second frame clock, under the same lock as the calls
- /// so the page and call counts cover exactly the same requests.
- pub(crate) fn asks_per_frame(frames: f64) -> String {
-     if !count_asks() {
-         return String::new();
-     }
--    let stats = std::mem::take(&mut JOURNAL.lock().unwrap_or_else(|e| e.into_inner()).stats);
-+    let stats = {
-+        let mut journal = JOURNAL.lock().unwrap_or_else(|e| e.into_inner());
-+        let stats = std::mem::take(&mut journal.stats);
-+        if crate::monitor::enabled() {
-+            LOGGED_ASKS[0].fetch_add(stats.calls.iter().sum(), std::sync::atomic::Ordering::Relaxed);
-+            LOGGED_ASKS[1].fetch_add(stats.pages.iter().sum(), std::sync::atomic::Ordering::Relaxed);
-+        }
-+        stats
-+    };
-     let pages = stats.pages.iter().sum::<u64>() as f64 / frames;
-     let calls = stats.calls.iter().sum::<u64>() as f64 / frames;
-     let [once, ahead, run, other] = stats.calls.map(|n| n as f64 / frames);
+ /// Ranges of one submission closer than this are asked about together:
+ /// walking the pages between them costs less than another kernel call (a
+ /// call that resets written pages costs 30-70 microseconds whatever the

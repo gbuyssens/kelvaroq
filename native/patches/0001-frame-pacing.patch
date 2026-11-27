@@ -1,5 +1,5 @@
 diff --git a/crates/victory-gpu/src/frame.rs b/crates/victory-gpu/src/frame.rs
-index 798b760..9d7911c 100644
+index 468812c59277097bf1b5159717dfdc061e5eb024..6035dcb810d5c91ae12545dafaf24edc6ff5ee4b 100644
 --- a/crates/victory-gpu/src/frame.rs
 +++ b/crates/victory-gpu/src/frame.rs
 @@ -142,6 +142,8 @@ pub(crate) extern "system" fn wait(
@@ -11,31 +11,29 @@ index 798b760..9d7911c 100644
      let hr = if wait > limit {
          std::thread::sleep(limit);
          TIMEOUT
-@@ -150,6 +152,10 @@ pub(crate) extern "system" fn wait(
-         last(kind).fetch_max(tick, Ordering::Relaxed);
-         S_OK
-     };
-+    #[cfg(windows)]
-+    if let Some(start) = timing {
-+        velkin_render::pacing::wait(wait.min(limit), start.elapsed());
-+    }
+@@ -155,6 +157,9 @@ pub(crate) extern "system" fn wait(
+         let us = wait.min(limit).as_micros() as u64;
+         crate::framelog::add(crate::framelog::T::PaceUs, us);
+         crate::framelog::here(crate::framelog::H::PaceUs, us);
++        if let Some(start) = timing {
++            velkin_render::pacing::wait(wait.min(limit), start.elapsed());
++        }
+     }
      #[cfg(all(windows, feature = "diagnostics"))]
      {
-         use crate::copystat::{C, add};
 diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
-index ecf79d5..48c5716 100644
+index 78f0e7db4ba67dbfca62b25404322ac1e2438484..9838d41a95e28ad46062f68c80e26f2d34ffd241 100644
 --- a/crates/victory-gpu/src/host.rs
 +++ b/crates/victory-gpu/src/host.rs
-@@ -7529,7 +7529,11 @@ impl Host {
-             if let Some((buffer, footprint)) = capture {
-                 crate::capture::save_read_back(frame, &buffer, &footprint);
-             }
--            let _ = p.swap_chain.Present(0, DXGI_PRESENT(0));
+@@ -11229,7 +11229,11 @@ impl Host {
+             // What Present answers was thrown away: a removal it is the
+             // first to report then looked as if the next call found it.
+             // Said once (a status that is no error, as "occluded", is not).
 +            let timing = velkin_render::pacing::start();
-+            let status = p.swap_chain.Present(0, DXGI_PRESENT(0));
+             let shown = p.swap_chain.Present(0, DXGI_PRESENT(0));
 +            if let Some(start) = timing {
-+                velkin_render::pacing::present(frame, start, std::time::Instant::now(), status.0);
++                velkin_render::pacing::present(frame, start, std::time::Instant::now(), shown.0);
 +            }
-             p.meter.frame(p.hwnd);
-             #[cfg(feature = "diagnostics")]
-             return Some(probe.is_some_and(|b| crate::capture::black(&b)));
+             if shown.is_err() {
+                 static ONCE: std::sync::Once = std::sync::Once::new();
+                 ONCE.call_once(|| {

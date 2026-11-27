@@ -1,8 +1,8 @@
 # Architecture et décisions
 
-## Moteur natif épinglé au 25 novembre 2026
+## Moteur natif épinglé au 27 novembre 2026
 
-Le constructeur assemble le fork à `f85101b6095e8cf3cecf8f0647cc7f5428daa177`, applique les correctifs de `native/patches/` dans l’ordre et ajoute les sources de `native/velkin-render/`. Le reçu `build.json` identifie l’arbre Git compilé, chaque correctif et l’exécutable. Le fork inclut le fil de soumission, la file de copie et la PR 220 de Vyacheslav Venglovsky sur les dessins indirects. L’option de récupération en vol vient de la PR 648 de Jonirulah. [Révision du fork](https://github.com/fxceless/victory-fork/tree/f85101b6095e8cf3cecf8f0647cc7f5428daa177)
+Le constructeur assemble le fork à `9a9091d180f044726463d3db819808086daeebae`, applique les correctifs de `native/patches/` dans l’ordre et ajoute les sources de `native/velkin-render/`. Le reçu `build.json` identifie l’arbre Git compilé, chaque correctif et l’exécutable. Le fork inclut le fil de soumission, la file de copie et la PR 220 de Vyacheslav Venglovsky sur les dessins indirects. L’option de récupération en vol vient de la PR 648 de Jonirulah. [Révision du fork](https://github.com/fxceless/victory-fork/tree/9a9091d180f044726463d3db819808086daeebae). Le recalage depuis `f85101b`, avec les correctifs repris, abandonnés et en attente, est décrit dans [native/RECALAGE.md](native/RECALAGE.md). Le tableau ci-dessous décrit encore les réglages de l'ancien pin : `VICTORY_WIDE_TEXTURES`, `VICTORY_NOT_ZEROED`, `VICTORY_TEXTURE_HEAPS` et les classes de pool Velkin n'existent plus.
 
 | Poste mesuré sur l’ancien moteur | Réglages du moteur à comparer |
 | --- | --- |

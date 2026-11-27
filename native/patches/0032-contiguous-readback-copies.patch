@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
-index 26b64fc926b3..fc26a7558d82 100644
+index 29a39ae6af3878b45459d9b2ae7fd99db45af9d7..30d83bdf44c91a7f1206a5fa5e41f09ed8c8b7e8 100644
 --- a/crates/victory-gpu/src/host.rs
 +++ b/crates/victory-gpu/src/host.rs
-@@ -2272,6 +2272,21 @@
+@@ -3564,6 +3564,21 @@ fn flagged_pieces(flags: &[(usize, u32, bool)]) -> std::collections::HashSet<(us
      flags.iter().filter(|f| f.2).map(|f| (f.0, f.1)).collect()
  }
  
@@ -24,11 +24,10 @@ index 26b64fc926b3..fc26a7558d82 100644
  /// Whether pieces fetched on a copy queue beside later flights are fetched
  /// again when those flights land (`VICTORY_QUEUE2_REFETCH=0`: not, as
  /// before; on by default with `VICTORY_QUEUE2` bit 1).
-@@ -2338,6 +2353,31 @@
- #[cfg(test)]
+@@ -3631,6 +3646,31 @@ fn note_beside(noted: &mut std::collections::HashMap<(usize, u32), u64>, fetched
  mod relay_tests {
      use super::{fetched_beside, flagged_pieces, landable, note_beside};
-+
+ 
 +    #[test]
 +    fn joined_readback_preserves_bytes_order_holes_and_distinct_resources() {
 +        use std::sync::Arc;
@@ -53,10 +52,11 @@ index 26b64fc926b3..fc26a7558d82 100644
 +        let overflow = [(first.clone(), 0, 1, u64::MAX), (first, 1, 2, 0)];
 +        assert_eq!(super::relay_copy_runs(&overflow, true).count(), 2);
 +    }
- 
++
      /// A piece fetched on the copy queue while a later flight was in the
      /// air is fetched again by that flight, and by no flight sent after
-@@ -4609,6 +4649,8 @@
+     /// the fetch had run; the note goes when its flights have landed.
+@@ -6644,6 +6684,8 @@ impl Host {
          };
          f.sent += 1;
          let ((allocator, list), fence, event, sent) = (f.list.clone(), f.fence.clone(), f.event, f.sent);
@@ -65,7 +65,7 @@ index 26b64fc926b3..fc26a7558d82 100644
          let waiting = std::time::Instant::now();
          // SAFETY: the list's last run was waited for by this thread; live
          // buffers (the copies are held by the plans); the fence and the
-@@ -4623,8 +4665,8 @@
+@@ -6658,8 +6700,8 @@ impl Host {
                      // title's either way.
                      let after = second.order_done();
                      let copy = second.down.list()?;
@@ -76,7 +76,7 @@ index 26b64fc926b3..fc26a7558d82 100644
                      }
                      let job = second.down.send(copy, &[(&self.fence, behind)], total)?;
                      second.down.wait(job, event)?;
-@@ -4643,8 +4685,8 @@
+@@ -6678,8 +6720,8 @@ impl Host {
                  }
                  allocator.Reset()?;
                  list.Reset(&allocator, None)?;

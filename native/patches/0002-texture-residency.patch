@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/draw.rs b/crates/victory-gpu/src/draw.rs
-index ca67721..d6d5fc0 100644
+index 9a09d179af11d5e977a85aef89deac390560a19e..1fb0530342da1766fd70992382f17b0b0faa00ca 100644
 --- a/crates/victory-gpu/src/draw.rs
 +++ b/crates/victory-gpu/src/draw.rs
-@@ -1943,15 +1943,11 @@ impl State {
+@@ -3189,15 +3189,11 @@ impl State {
                  crate::host::log_removal_context();
                  return;
              }
@@ -20,10 +20,10 @@ index ca67721..d6d5fc0 100644
                  HEAP_TEXTURES_PARTLY[1].fetch_add(1, Ordering::Relaxed);
              }
 diff --git a/crates/victory-gpu/src/texture.rs b/crates/victory-gpu/src/texture.rs
-index a3e7c16..3f05635 100644
+index 504a44282359ce6566826612f9d625de2f38d7a0..0eaaec5f2d02a6ac8a045286ef53dcf24a37743a 100644
 --- a/crates/victory-gpu/src/texture.rs
 +++ b/crates/victory-gpu/src/texture.rs
-@@ -1250,15 +1250,21 @@ pub(crate) fn is_staged(resource: This) -> bool {
+@@ -1451,15 +1451,21 @@ pub(crate) fn is_staged(resource: This) -> bool {
      map.as_ref().is_some_and(|map| map.contains_key(&(resource as usize)))
  }
  
@@ -51,7 +51,7 @@ index a3e7c16..3f05635 100644
  }
  
  /// Whether `[at, at + len)` is committed memory (streamed textures may be
-@@ -1297,8 +1303,7 @@ fn by_query() -> bool {
+@@ -1498,8 +1504,7 @@ fn by_query() -> bool {
  /// A page that is committed and may not be read counts as not there, which
  /// is what the callers ask for: they read or write the memory next.
  fn readable(at: usize, len: usize, all: bool) -> (usize, usize) {
@@ -61,7 +61,7 @@ index a3e7c16..3f05635 100644
      const KERNEL_PAGE: usize = 4096;
      let (first, last) = (at / KERNEL_PAGE, at.saturating_add(len - 1) / KERNEL_PAGE);
      let of = last - first + 1;
-@@ -1311,20 +1316,9 @@ fn readable(at: usize, len: usize, all: bool) -> (usize, usize) {
+@@ -1512,20 +1517,9 @@ fn readable(at: usize, len: usize, all: bool) -> (usize, usize) {
          for (i, entry) in info[..n].iter_mut().enumerate() {
              entry.VirtualAddress = ((page + i) * KERNEL_PAGE) as *mut _;
          }
@@ -84,7 +84,7 @@ index a3e7c16..3f05635 100644
                  there += 1;
              } else if all {
                  return (there, of);
-@@ -1335,6 +1329,43 @@ fn readable(at: usize, len: usize, all: bool) -> (usize, usize) {
+@@ -1536,6 +1530,43 @@ fn readable(at: usize, len: usize, all: bool) -> (usize, usize) {
      (there, of)
  }
  
@@ -128,7 +128,7 @@ index a3e7c16..3f05635 100644
  fn committed_by_query(at: *const u8, len: usize) -> bool {
      use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEMORY_BASIC_INFORMATION, VirtualQuery};
      let mut p = at as usize;
-@@ -1365,16 +1396,12 @@ pub(crate) fn mapped_bytes(at: *const u8, len: usize) -> u64 {
+@@ -1566,16 +1597,12 @@ pub(crate) fn mapped_bytes(at: *const u8, len: usize) -> u64 {
      }
      let start = at as usize;
      let end = start.saturating_add(len);
@@ -151,7 +151,7 @@ index a3e7c16..3f05635 100644
          // By 64 KiB block, one page asked of each: the title's memory is
          // mapped in blocks of that size (the console's page), and the
          // answer is a measure of how much of a texture has arrived, not a
-@@ -1383,18 +1410,29 @@ pub(crate) fn mapped_bytes(at: *const u8, len: usize) -> u64 {
+@@ -1584,18 +1611,29 @@ pub(crate) fn mapped_bytes(at: *const u8, len: usize) -> u64 {
          // for each of its missing pages, every frame it stayed due: 1,663
          // textures "uploaded in part" kept the pass over the heap's views at
          // 90-160 ms a frame (run 81). `VICTORY_MAPPED_BY_PAGE=1`: by page.
@@ -183,7 +183,7 @@ index a3e7c16..3f05635 100644
      let (mut p, mut there) = (start, 0u64);
      while p < end {
          // SAFETY: plain data filled in by the query.
-@@ -1499,6 +1537,163 @@ fn staging(resource: This, texture: &ID3D12Resource) -> Option<Arc<Staging>> {
+@@ -1775,6 +1813,163 @@ fn refresh_unlocked_with(
  mod title_memory_tests {
      use super::with_title;
  

@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
-index 1ffc6e2..3f8ae8e 100644
+index 1fe8a5ff3035244a86bcb27733526b450e16455e..e46bbb749fe04d90055da037e44f0129d651dd3d 100644
 --- a/crates/victory-gpu/src/host.rs
 +++ b/crates/victory-gpu/src/host.rs
-@@ -1859,7 +1859,7 @@ struct Deferred {
+@@ -3127,7 +3127,7 @@ struct Deferred {
      /// Host objects the list's commands name (pipelines, root signatures,
      /// descriptor heaps): the title may release its objects before it
      /// submits the list.
@@ -11,7 +11,7 @@ index 1ffc6e2..3f8ae8e 100644
      /// Buffer ranges refreshed since the last title copy (host copy,
      /// address, bytes): refreshing them again would find the same bytes.
      refreshed: std::collections::HashSet<(usize, usize, usize)>,
-@@ -6573,10 +6573,8 @@ impl HostList {
+@@ -9518,10 +9518,8 @@ impl HostList {
      }
  
      /// Keeps `object` alive until the list is reset.
@@ -25,7 +25,7 @@ index 1ffc6e2..3f8ae8e 100644
  
      /// Whether this is the first time since the reset that the list asks
 diff --git a/crates/victory-gpu/src/queue.rs b/crates/victory-gpu/src/queue.rs
-index f1b7b36..e0197ab 100644
+index 176697b93d8e7b424a7089532003743b94154487..90793d74134dc99f6d51bb45a4f79a5768f99adf 100644
 --- a/crates/victory-gpu/src/queue.rs
 +++ b/crates/victory-gpu/src/queue.rs
 @@ -3,6 +3,8 @@
@@ -46,11 +46,9 @@ index f1b7b36..e0197ab 100644
  }
  const _: () = assert!(std::mem::offset_of!(Queue, kind) == 0x10);
  
-@@ -60,9 +62,39 @@ enum Held {
-     Running,
- }
+@@ -181,7 +183,38 @@ static PRESENTS_BEHIND: AtomicU64 = AtomicU64::new(0);
  
--/// The queues that hold something (their addresses).
+ /// The queues that hold something (their addresses).
  #[cfg(windows)]
 -static WAITING: std::sync::Mutex<Vec<usize>> = std::sync::Mutex::new(Vec::new());
 +#[derive(Default)]
@@ -88,7 +86,7 @@ index f1b7b36..e0197ab 100644
  
  #[cfg(windows)]
  fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-@@ -136,7 +168,7 @@ fn submit_cut(this: This, lists: &[This]) {
+@@ -255,7 +288,7 @@ fn submit_cut(this: This, lists: &[This]) {
      let Some(host) = crate::host::host() else {
          return;
      };
@@ -97,7 +95,7 @@ index f1b7b36..e0197ab 100644
          lists
              .iter()
              .position(|&l| crate::list::cut_list(l))
-@@ -192,16 +224,13 @@ fn submit_cut(this: This, lists: &[This]) {
+@@ -320,16 +353,13 @@ fn submit_cut(this: This, lists: &[This]) {
              );
          }
          {
@@ -116,7 +114,7 @@ index f1b7b36..e0197ab 100644
      }
      // What ran may be what another queue waits for, and what was just
      // given to the queue may be free to run already.
-@@ -218,7 +247,7 @@ fn submit_split(this: This, lists: &[This]) {
+@@ -346,7 +376,7 @@ fn submit_split(this: This, lists: &[This]) {
      };
      let by = crate::list::waits_by_list(lists);
      // Behind what the queue already holds, nothing runs now.
@@ -125,7 +123,7 @@ index f1b7b36..e0197ab 100644
          (0..lists.len())
              .find(|&i| by[i].iter().any(|w| !w.met()))
              .unwrap_or(lists.len())
-@@ -279,11 +308,8 @@ fn submit_split(this: This, lists: &[This]) {
+@@ -422,11 +452,8 @@ fn submit_split(this: This, lists: &[This]) {
              pieces.push(Held::Run(taken, order));
              from = to;
          }
@@ -139,7 +137,7 @@ index f1b7b36..e0197ab 100644
      }
      // What ran may be what another queue waits for, and what was just held
      // may be free to run already.
-@@ -297,7 +323,7 @@ fn hold(this: This, what: impl FnOnce() -> Held) -> bool {
+@@ -440,7 +467,7 @@ fn hold(this: This, what: impl FnOnce() -> Held) -> bool {
      if this.is_null() {
          return false;
      }
@@ -148,7 +146,37 @@ index f1b7b36..e0197ab 100644
      if held.is_empty() {
          return false;
      }
-@@ -420,11 +446,9 @@ fn release_held_now(all: bool) {
+@@ -639,7 +666,7 @@ struct Joined {
+     signals: Vec<(usize, u64)>,
+     /// The queues with a part here: each has [`Held::Running`] at the
+     /// head of its line.
+-    marked: Vec<usize>,
++    marked: Vec<(usize, Arc<QueueLine>)>,
+ }
+ 
+ #[cfg(windows)]
+@@ -718,15 +745,15 @@ fn send_joined(joined: &mut Joined) {
+             crate::fence::set(fence as This, value);
+         }
+     }
+-    for q in joined.marked.drain(..) {
+-        // SAFETY: a live queue, as in the loop that marked it.
+-        let line = unsafe { &(*(q as *const Queue)).held };
+-        let mut held = lock(line);
++    for (_, line) in joined.marked.drain(..) {
++        // The line is ours to hold even if its queue was released meanwhile.
++        let mut held = lock(&line.commands);
+         if matches!(held.first(), Some(Held::Running)) {
+             held.remove(0);
+         }
+         if held.is_empty() {
+-            lock(&WAITING).retain(|&w| w != q);
++            drop(held);
++            unregister(&line);
+         }
+     }
+ }
+@@ -764,14 +791,12 @@ fn release_held_now(all: bool) {
      loop {
          let queues = lock(&WAITING).clone();
          let mut moved = false;
@@ -160,10 +188,33 @@ index f1b7b36..e0197ab 100644
 +        for (q, line) in queues {
 +            let mut held = lock(&line.commands);
 +            while !line.retired.load(Ordering::Acquire) {
-                 match held.first() {
+                 // A queue with a part in `joined` has our mark at the head
+                 // of its line: what is looked at is behind the mark.
+-                let base = usize::from(joined.marked.contains(&q));
++                let base = usize::from(joined.marked.iter().any(|(m, _)| *m == q));
+                 match held.get(base) {
                      None | Some(Held::Running) => break,
                      Some(&Held::Wait(fence, value))
-@@ -485,7 +509,7 @@ fn release_held_now(all: bool) {
+@@ -837,15 +862,15 @@ fn release_held_now(all: bool) {
+                         if joining {
+                             // Taken, to go with the parts that follow it.
+                             // The line stays open behind our mark.
+-                            if !joined.marked.contains(&q) {
++                            if !joined.marked.iter().any(|(m, _)| *m == q) {
+                                 held.insert(0, Held::Running);
+-                                joined.marked.push(q);
++                                joined.marked.push((q, line.clone()));
+                             }
+                             joined.add(lists, order);
+                             if joined.full() {
+                                 drop(held);
+                                 send_joined(&mut joined);
+-                                held = lock(line);
++                                held = lock(&line.commands);
+                             }
+                             moved = true;
+                             continue;
+@@ -862,7 +887,7 @@ fn release_held_now(all: bool) {
                                  held.insert(0, Held::Running);
                                  drop(held);
                                  host.execute_late(lists, order);
@@ -172,7 +223,16 @@ index f1b7b36..e0197ab 100644
                                  if matches!(held.first(), Some(Held::Running)) {
                                      held.remove(0);
                                  }
-@@ -531,7 +555,7 @@ fn release_held_now(all: bool) {
+@@ -911,7 +936,7 @@ fn release_held_now(all: bool) {
+                             held.insert(0, Held::Running);
+                             drop(held);
+                             show();
+-                            held = lock(line);
++                            held = lock(&line.commands);
+                             if matches!(held.first(), Some(Held::Running)) {
+                                 held.remove(0);
+                             }
+@@ -932,7 +957,7 @@ fn release_held_now(all: bool) {
                  moved = true;
              }
              if held.is_empty() {
@@ -181,7 +241,7 @@ index f1b7b36..e0197ab 100644
              }
          }
          if !moved {
-@@ -620,12 +644,7 @@ extern "system" fn query(this: This, iid: *const Iid, out: *mut This) -> HRESULT
+@@ -1026,12 +1051,7 @@ extern "system" fn query(this: This, iid: *const Iid, out: *mut This) -> HRESULT
      )
  }
  extern "system" fn release(this: This) -> u32 {
@@ -195,7 +255,7 @@ index f1b7b36..e0197ab 100644
  }
  
  /// Runs the lists' host lists and waits for them (decision 0007). A queue
-@@ -655,11 +674,8 @@ extern "system" fn execute(this: This, count: u32, lists: *const This) {
+@@ -1073,11 +1093,8 @@ fn execute_now(this: This, count: u32, lists: *const This) {
                  if SEEN.fetch_add(1, Ordering::Relaxed) < 8 {
                      tracing::info!(kind = queue(this).kind, ?unmet, "a submission is held for a memory value");
                  }
@@ -209,7 +269,7 @@ index f1b7b36..e0197ab 100644
              }
          }
          let kept = hold(this, || {
-@@ -769,7 +785,7 @@ extern "system" fn wait(this: This, fence: This, value: u64) -> HRESULT {
+@@ -1189,7 +1206,7 @@ extern "system" fn wait(this: This, fence: This, value: u64) -> HRESULT {
          #[cfg(feature = "diagnostics")]
          crate::capture::op(this as usize, || format!("WAIT queue kind {} for fence {fence:?} value {value} (now {now})", queue(this).kind));
          let behind = {
@@ -218,7 +278,7 @@ index f1b7b36..e0197ab 100644
              let behind = !held.is_empty() || now < value;
              if behind && waits() {
                  held.push(Held::Wait(fence as usize, value));
-@@ -789,12 +805,7 @@ extern "system" fn wait(this: This, fence: This, value: u64) -> HRESULT {
+@@ -1209,12 +1226,7 @@ extern "system" fn wait(this: This, fence: This, value: u64) -> HRESULT {
              }
          }
          if behind && waits() {
@@ -232,8 +292,8 @@ index f1b7b36..e0197ab 100644
              // The fence may have got there meanwhile.
              release_held(false);
          }
-@@ -1161,6 +1172,30 @@ mod tests {
-     use super::*;
+@@ -1654,6 +1666,30 @@ mod tests {
+     }
      use crate::object::slot;
  
 +    #[cfg(windows)]

@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/fence.rs b/crates/victory-gpu/src/fence.rs
-index 98daa899ba3c913abf3b40dfe50264994f4baa0c..9b56f48b9f19c4f9bf51a3fd3a565f0283e9fe3f 100644
+index b82033550223aa628bd75a700c22465f3a5ca389..2760557dd674e70f7dcaf0ce417d1afc81715b90 100644
 --- a/crates/victory-gpu/src/fence.rs
 +++ b/crates/victory-gpu/src/fence.rs
-@@ -37,6 +37,30 @@ fn fence<'a>(this: This) -> &'a Fence {
+@@ -40,6 +40,30 @@ fn fence<'a>(this: This) -> &'a Fence {
      unsafe { &*this.cast::<Fence>() }
  }
  
@@ -34,10 +34,10 @@ index 98daa899ba3c913abf3b40dfe50264994f4baa0c..9b56f48b9f19c4f9bf51a3fd3a565f02
      _: This,
      initial: u64,
 diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
-index fc26a7558d82b9096cc54944e28e359a4cd83733..b7a3607db999e654a62b1eed17d9fabe18f9d5f2 100644
+index 30d83bdf44c91a7f1206a5fa5e41f09ed8c8b7e8..e2fea1a6e1197efa35977697632222ec63e31f01 100644
 --- a/crates/victory-gpu/src/host.rs
 +++ b/crates/victory-gpu/src/host.rs
-@@ -2538,8 +2538,8 @@ enum Late {
+@@ -3837,8 +3837,8 @@ enum Late {
      Run(Flight),
      /// A bottom-of-pipe write of the flight before it: address, what, bytes.
      Write(usize, crate::queue::Written, usize),
@@ -48,7 +48,7 @@ index fc26a7558d82b9096cc54944e28e359a4cd83733..b7a3607db999e654a62b1eed17d9fabe
  }
  
  struct Line {
-@@ -3137,7 +3137,7 @@ fn stale_under_flights(runs: &[&HostList]) -> bool {
+@@ -4767,7 +4767,7 @@ fn sync_batched() -> bool {
  /// A fence signal on a queue ([`late`]): goes behind the flights in the
  /// air, if there are any, and is set when they are settled. Whether it
  /// did; if not the caller sets the fence now.
@@ -57,7 +57,7 @@ index fc26a7558d82b9096cc54944e28e359a4cd83733..b7a3607db999e654a62b1eed17d9fabe
      if !late() {
          return false;
      }
-@@ -3145,7 +3145,7 @@ pub(crate) fn late_signal(fence: usize, value: u64) -> bool {
+@@ -4775,7 +4775,7 @@ pub(crate) fn late_signal(fence: usize, value: u64) -> bool {
      if line.line.is_empty() && !line.settling {
          return false;
      }
@@ -66,8 +66,8 @@ index fc26a7558d82b9096cc54944e28e359a4cd83733..b7a3607db999e654a62b1eed17d9fabe
      LATE_STATS[14].fetch_add(1, Ordering::Relaxed);
      drop(line);
      // A signal alone (behind a settle under way) has no flight to wake
-@@ -3197,6 +3197,23 @@ pub(crate) fn late_met(wait: &crate::list::ValueWait) -> bool {
-     wait.met()
+@@ -4850,6 +4850,23 @@ pub(crate) fn late_met_known(wait: &crate::list::ValueWait) -> bool {
+     false
  }
  
 +#[cfg(test)]
@@ -90,7 +90,7 @@ index fc26a7558d82b9096cc54944e28e359a4cd83733..b7a3607db999e654a62b1eed17d9fabe
  /// Settles the flights in the air, if any ([`Host::settle`]), for reason
  /// `why` (one of the `WHY_` places). Not from inside a submission.
  pub(crate) fn settle_now(why: usize) {
-@@ -4974,7 +4991,7 @@ impl Host {
+@@ -7009,7 +7026,7 @@ impl Host {
                      landed.push((flight.lists, flight.order));
                  }
                  Late::Write(at, what, bytes) => what.write(at as *mut u8, bytes),
@@ -99,7 +99,7 @@ index fc26a7558d82b9096cc54944e28e359a4cd83733..b7a3607db999e654a62b1eed17d9fabe
              }
          }
          if last > 0 {
-@@ -5400,7 +5417,7 @@ impl Host {
+@@ -7458,7 +7475,7 @@ impl Host {
                          landed.push((flight.lists, flight.order));
                      }
                      Late::Write(at, what, bytes) => what.write(at as *mut u8, bytes),
@@ -109,7 +109,7 @@ index fc26a7558d82b9096cc54944e28e359a4cd83733..b7a3607db999e654a62b1eed17d9fabe
              }
              if last > 0 {
 diff --git a/crates/victory-gpu/src/queue.rs b/crates/victory-gpu/src/queue.rs
-index e0197abc59d623978d4259f9a5b5c325884d9625..9661a2ba7284c855d60b3ab54e225494838c8d88 100644
+index 90793d74134dc99f6d51bb45a4f79a5768f99adf..e471d631e95955afdb9a2f57d8b7b42e0f3b4860 100644
 --- a/crates/victory-gpu/src/queue.rs
 +++ b/crates/victory-gpu/src/queue.rs
 @@ -46,15 +46,15 @@ const _: () = assert!(std::mem::offset_of!(Queue, kind) == 0x10);
@@ -131,7 +131,7 @@ index e0197abc59d623978d4259f9a5b5c325884d9625..9661a2ba7284c855d60b3ab54e225494
      /// With [`behind`]: the submission at the head of the line is being
      /// prepared and sent by our thread, with the line unlocked, so the
      /// title can add to its end meanwhile; whatever is added stays behind
-@@ -377,14 +377,24 @@ pub(crate) fn behind() -> bool {
+@@ -521,14 +521,24 @@ pub(crate) fn behind() -> bool {
      static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
      *ON.get_or_init(|| {
          let on = std::env::var_os("VICTORY_ASYNC_SUBMIT").is_some_and(|v| v == "1") && crate::host::late() && cuts();
@@ -161,9 +161,29 @@ index e0197abc59d623978d4259f9a5b5c325884d9625..9661a2ba7284c855d60b3ab54e225494
  /// Whether there is something for [`worker`] to look at.
  #[cfg(windows)]
  static WORK: (std::sync::Mutex<bool>, std::sync::Condvar) = (std::sync::Mutex::new(false), std::sync::Condvar::new());
-@@ -451,12 +461,28 @@ fn release_held_now(all: bool) {
-             while !line.retired.load(Ordering::Acquire) {
-                 match held.first() {
+@@ -663,7 +673,7 @@ struct Joined {
+     order: Vec<usize>,
+     parts: usize,
+     /// Signals met behind those parts: delivered when the parts are sent.
+-    signals: Vec<(usize, u64)>,
++    signals: Vec<(crate::fence::FenceRef, u64)>,
+     /// The queues with a part here: each has [`Held::Running`] at the
+     /// head of its line.
+     marked: Vec<(usize, Arc<QueueLine>)>,
+@@ -741,8 +751,8 @@ fn send_joined(joined: &mut Joined) {
+     }
+     // Behind what was just sent, in the order they were met.
+     for (fence, value) in joined.signals.drain(..) {
+-        if !crate::host::late_signal(fence, value) {
+-            crate::fence::set(fence as This, value);
++        if !crate::host::late_signal(fence.as_this(), value) {
++            crate::fence::set(fence.as_this(), value);
+         }
+     }
+     for (_, line) in joined.marked.drain(..) {
+@@ -799,8 +809,8 @@ fn release_held_now(all: bool) {
+                 let base = usize::from(joined.marked.iter().any(|(m, _)| *m == q));
+                 match held.get(base) {
                      None | Some(Held::Running) => break,
 -                    Some(&Held::Wait(fence, value))
 -                        if !all && crate::fence::completed(fence as This) < value =>
@@ -171,6 +191,10 @@ index e0197abc59d623978d4259f9a5b5c325884d9625..9661a2ba7284c855d60b3ab54e225494
 +                        if !all && crate::fence::completed(fence.as_this()) < *value =>
                      {
                          break;
+                     }
+@@ -815,7 +825,23 @@ fn release_held_now(all: bool) {
+                             JOINED[4].fetch_add(1, Ordering::Relaxed);
+                         }
                      }
 -                    Some(Held::Value(wait)) if !all && !value_met(wait) => break,
 +                    Some(&Held::Value(wait)) if !all => {
@@ -190,22 +214,22 @@ index e0197abc59d623978d4259f9a5b5c325884d9625..9661a2ba7284c855d60b3ab54e225494
 +                            break;
 +                        }
 +                    }
-                     Some(_) => {}
-                 }
-                 match held.remove(0) {
-@@ -547,8 +573,8 @@ fn release_held_now(all: bool) {
-                     // Behind what was sent to the card and not waited
-                     // for, if anything was.
-                     Held::Signal(fence, value) => {
--                        if !crate::host::late_signal(fence, value) {
+                     // The frame is shown behind the parts taken: they are
+                     // sent first.
+                     Some(Held::Present(..)) if !joined.is_empty() => break,
+@@ -949,8 +975,8 @@ fn release_held_now(all: bool) {
+                         if !joined.is_empty() {
+                             // Behind parts not sent yet: with them.
+                             joined.signals.push((fence, value));
+-                        } else if !crate::host::late_signal(fence, value) {
 -                            crate::fence::set(fence as This, value);
-+                        if !crate::host::late_signal(fence.as_this(), value) {
++                        } else if !crate::host::late_signal(fence.as_this(), value) {
 +                            crate::fence::set(fence.as_this(), value);
                          }
                      }
                  }
-@@ -749,13 +775,13 @@ extern "system" fn signal(this: This, fence: This, value: u64) -> HRESULT {
-     }
+@@ -1170,13 +1196,13 @@ extern "system" fn signal(this: This, fence: This, value: u64) -> HRESULT {
+     crate::fence::pace::signal_called(fence as usize, value);
      // A queue that waits signals after what it holds.
      #[cfg(windows)]
 -    if hold(this, || Held::Signal(fence as usize, value)) {
@@ -220,7 +244,7 @@ index e0197abc59d623978d4259f9a5b5c325884d9625..9661a2ba7284c855d60b3ab54e225494
          return S_OK;
      }
      let _ = this;
-@@ -788,7 +814,7 @@ extern "system" fn wait(this: This, fence: This, value: u64) -> HRESULT {
+@@ -1209,7 +1235,7 @@ extern "system" fn wait(this: This, fence: This, value: u64) -> HRESULT {
              let mut held = lock(&queue(this).held.commands);
              let behind = !held.is_empty() || now < value;
              if behind && waits() {
@@ -229,8 +253,8 @@ index e0197abc59d623978d4259f9a5b5c325884d9625..9661a2ba7284c855d60b3ab54e225494
              }
              behind
          };
-@@ -1172,6 +1198,179 @@ mod tests {
-     use super::*;
+@@ -1666,6 +1692,179 @@ mod tests {
+     }
      use crate::object::slot;
  
 +    #[cfg(windows)]

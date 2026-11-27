@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/descriptor/host.rs b/crates/victory-gpu/src/descriptor/host.rs
-index a72ecd32bb55..ea1aea489fb6 100644
+index a0a5b96849224c436f13427d843c7635eef9ea73..8f7a263da834214454d30b443b5955b7f81c71d7 100644
 --- a/crates/victory-gpu/src/descriptor/host.rs
 +++ b/crates/victory-gpu/src/descriptor/host.rs
-@@ -914,7 +914,7 @@
+@@ -1142,7 +1142,7 @@ impl HostHeap {
          let strides = (!sampler)
              .then(|| {
                  let bytes = u64::from(victory_shader::emit::SLOT_STRIDES_COUNT) * 4;
@@ -12,10 +12,10 @@ index a72ecd32bb55..ea1aea489fb6 100644
                  let gpu = unsafe {
                      std::ptr::write_bytes(data, 0, bytes as usize);
 diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
-index 3f8ae8ec7db4..2eb64848877e 100644
+index e46bbb749fe04d90055da037e44f0129d651dd3d..3bd4ff640d8f26c8f712357e69b4a68fc8de7ad3 100644
 --- a/crates/victory-gpu/src/host.rs
 +++ b/crates/victory-gpu/src/host.rs
-@@ -57,6 +57,7 @@
+@@ -60,6 +60,7 @@ pub(crate) struct Host {
      /// The adapter the device is on, for its memory budget
      /// ([`Host::video_memory`]); `None` if the system does not name it.
      adapter: Option<IDXGIAdapter3>,
@@ -23,7 +23,7 @@ index 3f8ae8ec7db4..2eb64848877e 100644
  }
  
  // SAFETY: D3D12 devices, queues, fences and descriptor heaps are
-@@ -673,6 +674,7 @@
+@@ -1426,6 +1427,7 @@ fn create() -> windows::core::Result<Host> {
              next_rtv: AtomicU32::new(0),
              presenter: Mutex::new(None),
              adapter,
@@ -31,10 +31,10 @@ index 3f8ae8ec7db4..2eb64848877e 100644
          })
      }
  }
-@@ -701,6 +703,66 @@
+@@ -1537,6 +1539,92 @@ mod tests {
+         unsafe { VirtualFree(allocation, 0, MEM_RELEASE); }
+     }
  
- #[cfg(test)]
- mod tests {
 +    #[test]
 +    fn readonly_upload_limits_include_live_buffers_and_dxgi_reserves() {
 +        use super::{readonly_upload_fits, readonly_upload_limit};
@@ -95,31 +95,60 @@ index 3f8ae8ec7db4..2eb64848877e 100644
 +        assert_eq!(READONLY_UPLOAD_BYTES.load(Relaxed), 0);
 +    }
 +
++    #[test]
++    fn wide_copies_preserve_dependencies_through_section_aliases() {
++        use crate::watch::tests::{drop_views, two_views};
++
++        const BYTES: usize = 512 << 10;
++        let (section, first, second) = two_views(BYTES);
++        let source = vec![0x6bu8; BYTES];
++        let mut result = vec![0u8; BYTES];
++        let at = result.as_mut_ptr() as usize;
++        // Les adresses virtuelles sont distinctes. La seconde copie doit
++        // néanmoins lire dans la section ce que la première vient d’écrire.
++        let mut copies = vec![(first, source.as_ptr() as usize, BYTES), (at, second, BYTES)];
++        assert_ne!(first, second);
++        let mapping = crate::watch::title_memory_reading();
++        let independent = |items: &[(usize, usize, usize)]| crate::inplace::private_copy_ranges(items, &mapping);
++        assert!(!independent(&copies));
++        assert!(independent(&[(at, at + 64, 64), (at + 128, at + 192, 64)]));
++        assert!(!independent(&[(at, at + 64, 64), (at + 128, at + 32, 64)]));
++        assert!(!independent(&[(usize::MAX - 1, at, 64)]));
++        drop(mapping);
++        super::title_copies(&mut super::Batch::default(), &mut copies);
++        drop_views(section, &[first, second], BYTES);
++        assert!(copies.is_empty());
++        assert!(result == source, "la seconde copie doit voir les octets écrits par la première");
++    }
++
      #[test]
-     fn wide_copies_preserve_dependencies_through_section_aliases() {
-         use crate::watch::tests::{drop_views, two_views};
-@@ -1459,7 +1521,7 @@
-         ALIVE[5].fetch_add(1, Ordering::Relaxed);
-         return Some(chunk);
+     fn sparse_copies_preserve_islands_and_observe_remaps() {
+         use windows_sys::Win32::System::Memory::*;
+@@ -2463,7 +2551,7 @@ fn take_chunk(host: &Host, size: u64) -> Option<(Chunk, u64)> {
+             return Some((chunk, size));
+         }
      }
 -    let (buffer, data) = host.upload_buffer(size)?;
 +    let (buffer, data) = host.shader_input_buffer(size)?;
      name(&buffer, || "list scratch".into());
      // SAFETY: a live buffer.
      let gpu = unsafe { buffer.GetGPUVirtualAddress() };
-@@ -6350,7 +6412,7 @@
+@@ -9272,7 +9360,7 @@ impl HostList {
          let mut s = self.scratch.lock().unwrap_or_else(|e| e.into_inner());
          let len = len.max(1).next_multiple_of(256);
          if len > SCRATCH_CHUNK {
 -            let (buffer, data) = host.upload_buffer(len)?;
 +            let (buffer, data) = host.shader_input_buffer(len)?;
-             name(&buffer, || format!("list scratch {len:#x}"));
+             name_frame(&buffer, || format!("list scratch {len:#x}"));
              // SAFETY: a live buffer.
              let gpu = unsafe { buffer.GetGPUVirtualAddress() };
-@@ -7198,6 +7260,13 @@
-         self.upload_buffer_as(size, D3D12_HEAP_FLAG_NONE)
+@@ -10667,6 +10755,17 @@ impl Host {
      }
  
+     pub(crate) fn upload_buffer(&self, size: u64) -> Option<(ID3D12Resource, *mut u8)> {
++        self.upload_buffer_as(size, D3D12_HEAP_FLAG_NONE)
++    }
++
 +    /// Private host allocations for shader inputs. The CPU only stores into
 +    /// this mapping. Unlike a guest buffer, it has no guest address through
 +    /// which a UAV or a readback could alias the allocation.
@@ -127,10 +156,20 @@ index 3f8ae8ec7db4..2eb64848877e 100644
 +        self.readonly_gpu_upload(size).or_else(|| self.upload_buffer(size))
 +    }
 +
-     /// With VICTORY_NOT_ZEROED=1 the allocator may skip clearing unused
-     /// size-class padding. Zero the entire exposed footprint ourselves:
-     /// sparse mip levels and row padding are not necessarily overwritten.
-@@ -7809,6 +7878,28 @@
++    fn upload_buffer_as(&self, size: u64, flags: D3D12_HEAP_FLAGS) -> Option<(ID3D12Resource, *mut u8)> {
+         MADE[0].fetch_add(1, Ordering::Relaxed);
+         MADE[1].fetch_add(size, Ordering::Relaxed);
+         let heap = D3D12_HEAP_PROPERTIES {
+@@ -10693,7 +10792,7 @@ impl Host {
+             self.device
+                 .CreateCommittedResource(
+                     &heap,
+-                    D3D12_HEAP_FLAG_NONE,
++                    flags,
+                     &desc,
+                     D3D12_RESOURCE_STATE_GENERIC_READ,
+                     None,
+@@ -11341,6 +11440,28 @@ pub(crate) fn legal_for(flags: u32, state: u32) -> u32 {
          .fold(state, |s, &(_, _, bits)| s & !bits)
  }
  
@@ -159,7 +198,7 @@ index 3f8ae8ec7db4..2eb64848877e 100644
  impl Host {
      /// The card's memory as the system accounts it to this process, in
      /// bytes: the budget and the use of the card's own memory, then of the
-@@ -7899,11 +7990,67 @@
+@@ -11539,11 +11660,67 @@ impl Host {
      pub(crate) fn shared_buffer(&self, size: u64) -> Option<(ID3D12Resource, *mut u8)> {
          MADE[2].fetch_add(1, Ordering::Relaxed);
          MADE[3].fetch_add(size, Ordering::Relaxed);
@@ -232,7 +271,7 @@ index 3f8ae8ec7db4..2eb64848877e 100644
          };
          let desc = D3D12_RESOURCE_DESC {
              Dimension: D3D12_RESOURCE_DIMENSION_BUFFER,
-@@ -7934,13 +8081,14 @@
+@@ -11574,13 +11751,14 @@ impl Host {
                  )
                  .and_then(|()| {
                      let b = buffer.as_ref().ok_or_else(windows::core::Error::empty)?;

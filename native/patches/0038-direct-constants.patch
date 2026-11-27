@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/draw.rs b/crates/victory-gpu/src/draw.rs
-index 4bb82b3..115970b 100644
+index e2909e53b2c94b2727bbcd92efaaffedae6634b1..54bc858812630ef3d6742f727c7b5d114f181bba 100644
 --- a/crates/victory-gpu/src/draw.rs
 +++ b/crates/victory-gpu/src/draw.rs
-@@ -638,6 +638,61 @@ pub(crate) fn dispatched() -> u64 {
+@@ -1089,6 +1089,61 @@ pub(crate) fn dispatched() -> u64 {
      DISPATCHED.load(Ordering::Relaxed)
  }
  
@@ -64,10 +64,10 @@ index 4bb82b3..115970b 100644
  /// The host address of a root view: its buffer's host copy, or for a
  /// constant buffer not 256-byte aligned there (the console needs 16) a
  /// copy in upload memory.
-@@ -2857,6 +2912,12 @@ impl State {
-                 let used = entries.iter().find(|u| u.table_offset_dwords / 8 == k);
-                 match crate::descriptor::view(table + u64::from(k) * 32) {
-                     Some(View::Constant(address, size)) => {
+@@ -4179,6 +4234,12 @@ impl State {
+                             host.constant_at(index, gpu, size);
+                             continue;
+                         }
 +                        // On the GPU's copy of the title memory, read when
 +                        // the draw runs, in the queue's order.
 +                        if let Some(gpu) = direct_constant(list, address, size) {
@@ -78,10 +78,10 @@ index 4bb82b3..115970b 100644
                              host.make_null(index);
                              continue;
 diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
-index b7a3607..2da483a 100644
+index e2fea1a6e1197efa35977697632222ec63e31f01..09cd099faf4656a0a9ebb6756219640af90143f3 100644
 --- a/crates/victory-gpu/src/host.rs
 +++ b/crates/victory-gpu/src/host.rs
-@@ -2682,7 +2682,7 @@ fn blocked_by(written: &[(usize, usize)], runs: &[&HostList], gpu_fills: &std::c
+@@ -3981,7 +3981,7 @@ fn blocked_by(written: &[(usize, usize)], runs: &[&HostList], count: bool) -> Op
                          // buffer of its own, four a frame, 43 to 60 ms a
                          // frame) and neither side had other bytes after
                          // one. A copy INTO such a range still waits.
@@ -90,7 +90,7 @@ index b7a3607..2da483a 100644
                              if count {
                                  fill_ahead::read(src, len);
                              }
-@@ -2703,7 +2703,7 @@ fn blocked_by(written: &[(usize, usize)], runs: &[&HostList], gpu_fills: &std::c
+@@ -3999,7 +3999,7 @@ fn blocked_by(written: &[(usize, usize)], runs: &[&HostList], count: bool) -> Op
                      if touches(written, src, src + len) {
                          // Not waited for, and checked when the flights land
                          // (`fill_ahead`).
@@ -99,7 +99,7 @@ index b7a3607..2da483a 100644
                              if count {
                                  fill_ahead::read(src, len);
                              }
-@@ -2768,8 +2768,14 @@ mod fill_ahead {
+@@ -4117,8 +4117,14 @@ mod fill_ahead {
      /// every present that waits).
      const KEEP: u64 = 16;
  
@@ -116,7 +116,7 @@ index b7a3607..2da483a 100644
      /// Since the last frame line: fills that read ahead; landings' writes
      /// that touched one's piece. Since the start: fills that read bytes a
      /// flight then changed.
-@@ -2798,9 +2804,24 @@ mod fill_ahead {
+@@ -4147,9 +4153,24 @@ mod fill_ahead {
  
      static READ: Mutex<Option<HashMap<usize, Piece>>> = Mutex::new(None);
  
@@ -142,17 +142,17 @@ index b7a3607..2da483a 100644
 +        !(src / PIECE..=(src + len - 1) / PIECE).any(|piece| set.contains(&piece))
      }
  
-     /// A fill reads `len` bytes at `src` ahead of flights that may write
-@@ -2826,7 +2847,7 @@ mod fill_ahead {
-     /// A landing is about to put `new` into title memory at `at`: bytes
+     /// With `VICTORY_CARD_FILLS` (`super::card_fills_mode`): the 64 KiB
+@@ -4202,7 +4223,7 @@ mod fill_ahead {
      /// shaders wrote, merged into the title's.
      pub(crate) fn wrote(at: usize, new: &[u8]) {
+         note_written(at, new.len());
 -        if new.is_empty() || WAIT.load(Relaxed) {
 +        if new.is_empty() {
              return;
          }
          let frame = crate::frame::current();
-@@ -2858,11 +2879,19 @@ mod fill_ahead {
+@@ -4234,11 +4255,19 @@ mod fill_ahead {
              }
              let n = COUNT[2].fetch_add(1, Relaxed) + 1;
              let first = now.iter().zip(&new[a - at..b - at]).position(|(x, y)| x != y).unwrap_or(0);
@@ -174,7 +174,7 @@ index b7a3607..2da483a 100644
                      to - from,
                      a + first
                  );
-@@ -2895,7 +2924,10 @@ mod fill_ahead {
+@@ -4282,7 +4311,10 @@ mod fill_ahead {
              ahead as f64 / frames,
              looked as f64 / frames,
              COUNT[2].load(Relaxed),
@@ -186,12 +186,12 @@ index b7a3607..2da483a 100644
          );
      }
  }
-@@ -3485,6 +3517,21 @@ fn late_line(frames: f64) {
+@@ -5164,6 +5196,21 @@ fn late_line(frames: f64) {
      #[cfg(feature = "diagnostics")]
      fill_check::line();
      fill_ahead::line(frames);
 +    {
-+        static SEEN: [AtomicU64; 2] = [const { AtomicU64::new(0) }; 2];
++        static SEEN: [std::sync::atomic::AtomicU64; 2] = [const { std::sync::atomic::AtomicU64::new(0) }; 2];
 +        let [direct, filled] = [0, 1].map(|i| {
 +            let now = crate::draw::CONSTANT_VIEWS[i].load(Ordering::Relaxed);
 +            now - SEEN[i].swap(now, Ordering::Relaxed)

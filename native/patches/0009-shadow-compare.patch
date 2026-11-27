@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/shadow.rs b/crates/victory-gpu/src/shadow.rs
-index 458583d..80bf272 100644
+index b603ec8b60bae02a187640e63d5b23908a785b05..24cdaeebd964f5b64840522a5679148c121fdf88 100644
 --- a/crates/victory-gpu/src/shadow.rs
 +++ b/crates/victory-gpu/src/shadow.rs
-@@ -1212,9 +1212,36 @@ fn last_difference(a: &[u8], b: &[u8]) -> Option<usize> {
+@@ -1700,9 +1700,36 @@ fn last_difference(a: &[u8], b: &[u8]) -> Option<usize> {
          .map(|i| chunk * DIFF_CHUNK + i)
  }
  
@@ -40,12 +40,12 @@ index 458583d..80bf272 100644
  
      /// The chunk searches agree with a byte-wise scan across chunk boundaries.
      #[test]
-@@ -2661,7 +2688,7 @@ impl Shadow {
-                 return to;
-             }
+@@ -3890,7 +3917,7 @@ impl Shadow {
              let at = from + (to - from) / threads * i;
--            (at - (start + at) % PIECE).max(from)
+             // (saturating: near the copy's start, the piece `at` lies in may
+             // begin before the copy does)
+-            at.saturating_sub((start + at) % PIECE).max(from)
 +            scan_boundary(start, from, at)
          };
          let scan = &scan;
-         std::thread::scope(|s| {
+         if kept_threads_now() {

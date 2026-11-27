@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/draw.rs b/crates/victory-gpu/src/draw.rs
-index eefcfdc..5616c84 100644
+index 1fb0530342da1766fd70992382f17b0b0faa00ca..54fb97af52c3e2609e862ba454c9cadf70fb543b 100644
 --- a/crates/victory-gpu/src/draw.rs
 +++ b/crates/victory-gpu/src/draw.rs
-@@ -1867,14 +1867,27 @@ impl State {
+@@ -2942,14 +2942,27 @@ impl State {
              user_data: 0,
              slot: 0,
          };
@@ -35,7 +35,7 @@ index eefcfdc..5616c84 100644
          // A backlog (a scene's first minutes: 22,000 slots due, 2-3 minutes of black
          // surfaces at 192 MB a frame) gets three times the bytes and the time until it
          // drains; `VICTORY_TEXTURE_CATCHUP=0` keeps the plain budget.
-@@ -1884,10 +1897,28 @@ impl State {
+@@ -2959,10 +2972,28 @@ impl State {
          // A run made early (`State::early_textures`) has a budget of its
          // own: its bytes on top of what the frame has spent so far.
          // (Not `most`: that is the longest wait between looks, used below.)
@@ -64,7 +64,7 @@ index eefcfdc..5616c84 100644
              None => (span, per_frame),
          };
          let began = std::time::Instant::now();
-@@ -2094,6 +2125,9 @@ impl State {
+@@ -3246,6 +3277,9 @@ impl State {
                  None => host.texture_slot_done(index, write, again),
              }
          }

@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/resource.rs b/crates/victory-gpu/src/resource.rs
-index 67c183987695..aabcb490e405 100644
+index 649952f2dd9e4bd21711c9769284691abeb0af6e..45fd3f47d5265c4cade80a44bcbac40aa87e8daf 100644
 --- a/crates/victory-gpu/src/resource.rs
 +++ b/crates/victory-gpu/src/resource.rs
-@@ -2460,8 +2460,10 @@
+@@ -2570,8 +2570,10 @@ fn hand_out_resource(
      }
      #[cfg(windows)]
      if desc.dimension == BUFFER {
@@ -14,11 +14,10 @@ index 67c183987695..aabcb490e405 100644
      }
      object::hand_out(RESOURCE, resource, iid, &RESOURCE_IIDS, out)
  }
-@@ -4137,4 +4139,96 @@
+@@ -4464,4 +4466,96 @@ float4 lit() : SV_Target { return 1.0; }
          assert_eq!(slot::<Release>(heap, 0x10)(heap), 1);
          assert_eq!(slot::<Release>(placed, 0x10)(placed), 0);
      }
--}
 +
 +    /// Run alone with VICTORY_CARD_READONLY_MB=0 or 1 and the usual 1 MiB
 +    /// threshold for large buffers. A UAV view of a larger, overlapping
@@ -111,12 +110,12 @@ index 67c183987695..aabcb490e405 100644
 +        assert_eq!(slot::<Release>(writable, 0x10)(writable), 0);
 +        assert_eq!(slot::<Release>(heap, 0x10)(heap), 0);
 +    }
-+}
+ }
 diff --git a/crates/victory-gpu/src/shadow.rs b/crates/victory-gpu/src/shadow.rs
-index c04926327000..fbe0a6bb1d84 100644
+index 24cdaeebd964f5b64840522a5679148c121fdf88..3894f74a36b94f07f5cf67a0dc0dcf683437c513 100644
 --- a/crates/victory-gpu/src/shadow.rs
 +++ b/crates/victory-gpu/src/shadow.rs
-@@ -82,6 +82,9 @@
+@@ -85,6 +85,9 @@ pub(crate) struct Shadow {
  /// What a copy in the card's memory ([`cards`]) has beside the buffer
  /// shaders see.
  struct Card {
@@ -126,10 +125,10 @@ index c04926327000..fbe0a6bb1d84 100644
      /// The CPU's side, in the PC's memory: what `data` maps. Title memory
      /// is copied into it as into any copy, and what changed in it goes to
      /// the card's side before the next submission.
-@@ -228,7 +231,9 @@
-         out[i] = stat.swap(0, Ordering::Relaxed);
-     }
-     out[7] = CARDED.lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|w| w.strong_count() > 0).count() as u64;
+@@ -352,7 +355,9 @@ pub(crate) fn card_stats() -> [u64; 10] {
+         }
+         carded.iter().filter(|w| w.strong_count() > 0).count() as u64
+     };
 -    out[8] = CARD_BYTES[0].load(Ordering::Relaxed) + WINDOW_CARD_BYTES.load(Ordering::Relaxed);
 +    out[8] = CARD_BYTES[0].load(Ordering::Relaxed)
 +        + WINDOW_CARD_BYTES.load(Ordering::Relaxed)
@@ -137,12 +136,10 @@ index c04926327000..fbe0a6bb1d84 100644
      out[9] = CARD_BYTES[1].load(Ordering::Relaxed);
      out
  }
-@@ -299,6 +304,47 @@
-         CARD_BYTES[0].fetch_sub(size, Ordering::Relaxed);
-     }
+@@ -425,6 +430,47 @@ fn card_for(size: u64) -> Option<ID3D12Resource> {
      buffer
-+}
-+
+ }
+ 
 +static READONLY_CARD_BYTES: AtomicU64 = AtomicU64::new(0);
 +
 +unsafe extern "system" fn release_readonly_card(size: *mut std::ffi::c_void) {
@@ -182,10 +179,12 @@ index c04926327000..fbe0a6bb1d84 100644
 +    unsafe { notifier.RegisterDestructionCallback(Some(release_readonly_card), size as usize as *const _) }.ok()?;
 +    READONLY_CARD_BYTES.fetch_add(size, Ordering::Relaxed);
 +    Some(buffer)
- }
- 
++}
++
  /// The most bytes of windows outside buffers whose copies go to the card's
-@@ -1985,7 +2031,7 @@
+ /// memory (`VICTORY_CARD_WINDOWS_MB`; 0, the default, none).
+ ///
+@@ -3016,7 +3062,7 @@ impl Drop for Shadow {
          if let Some(card) = &mut self.card {
              if window {
                  WINDOW_CARD_BYTES.fetch_sub(card.size, Ordering::Relaxed);
@@ -194,7 +193,7 @@ index c04926327000..fbe0a6bb1d84 100644
                  CARD_BYTES[0].fetch_sub(card.size, Ordering::Relaxed);
              }
              if card.before.get_mut().unwrap_or_else(|e| e.into_inner()).is_some() {
-@@ -3405,6 +3451,7 @@
+@@ -4862,6 +4908,7 @@ impl Shadow {
  struct Entry {
      end: u64,
      shadow: Option<Arc<Shadow>>,
@@ -202,7 +201,7 @@ index c04926327000..fbe0a6bb1d84 100644
  }
  
  /// Title buffers by (start address, resource), with their copy once made.
-@@ -3415,12 +3462,18 @@
+@@ -4872,13 +4919,19 @@ fn buffers() -> std::sync::MutexGuard<'static, BTreeMap<(u64, usize), Entry>> {
  }
  
  /// A title buffer exists at `start` (`len` bytes).
@@ -212,7 +211,8 @@ index c04926327000..fbe0a6bb1d84 100644
 +}
 +
 +pub(crate) fn register_buffer(resource: usize, start: u64, len: u64, read_only: bool) {
-     buffers().insert(
+     let mut map = buffers();
+     map.insert(
          (start, resource),
          Entry {
              end: start + len,
@@ -220,8 +220,8 @@ index c04926327000..fbe0a6bb1d84 100644
 +            read_only,
          },
      );
- }
-@@ -3548,8 +3601,11 @@
+     // After the insert, with the table's lock still held ([`TABLES_CHANGED`];
+@@ -5203,8 +5256,11 @@ fn lookup_tables(address: u64, len: u64, any: bool) -> Option<Arc<Shadow>> {
          crate::host::name(&buffer, || format!("title buffer {:#x}+{len:#x}", key.0));
          // A big one, with `cards`: shaders get a buffer in the card's own
          // memory, and the one just made is the CPU's side.
@@ -235,7 +235,7 @@ index c04926327000..fbe0a6bb1d84 100644
                  crate::host::name(&on_card, || format!("title buffer {:#x}+{len:#x} on the card", key.0));
                  tracing::info!(
                      start = format_args!("{:#x}", key.0),
-@@ -3557,6 +3613,7 @@
+@@ -5212,6 +5268,7 @@ fn lookup_tables(address: u64, len: u64, any: bool) -> Option<Arc<Shadow>> {
                      "a buffer's host copy is in the card's memory"
                  );
                  let card = Card {
@@ -243,7 +243,7 @@ index c04926327000..fbe0a6bb1d84 100644
                      staging: buffer,
                      before: Mutex::default(),
                      dirty: Mutex::default(),
-@@ -3773,6 +3830,7 @@
+@@ -5450,6 +5507,7 @@ fn loose(address: u64, end: u64, unsized_ask: bool, any: bool) -> Option<Arc<Sha
          Some(on_card) => {
              crate::host::name(&on_card, || format!("title memory {start:#x}+{len:#x} on the card"));
              let card = Card {
@@ -251,7 +251,7 @@ index c04926327000..fbe0a6bb1d84 100644
                  staging: buffer,
                  before: Mutex::default(),
                  dirty: Mutex::default(),
-@@ -4052,6 +4110,7 @@
+@@ -5733,6 +5791,7 @@ mod card_merge_tests {
              side[title_byte] = title[title_byte];
              let mut shadow = Shadow::new(buffer.clone(), side.as_mut_ptr(), 0, title.as_ptr() as u64, LEN as u64);
              shadow.card = Some(Card {

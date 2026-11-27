@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/descriptor/host.rs b/crates/victory-gpu/src/descriptor/host.rs
-index 21cc194..a72ecd3 100644
+index 85755d5f7e3fb24a0777acf65a1c039e5cfa570a..a0a5b96849224c436f13427d843c7635eef9ea73 100644
 --- a/crates/victory-gpu/src/descriptor/host.rs
 +++ b/crates/victory-gpu/src/descriptor/host.rs
-@@ -363,10 +363,10 @@ impl Spans {
+@@ -554,10 +554,10 @@ impl Spans {
  /// has them mapped; `crate::watch::title_memory_written`), since a texture
  /// pass last took the ranges ([`page_written`]). Kept apart from
  /// [`REMAPPED`] so that what such writes do is counted by itself.
@@ -16,7 +16,7 @@ index 21cc194..a72ecd3 100644
  /// pass took them; of those, the slots whose texture had been uploaded
  /// before the write (out of the queue, or in it after an upload): they are
  /// the ones that kept the bytes from before, and the ones made due when
-@@ -386,30 +386,24 @@ const PAGE_WRITE_AFTER: u64 = 2;
+@@ -577,30 +577,24 @@ const PAGE_WRITE_AFTER: u64 = 2;
  /// ranges; locks one mutex and calls nothing.
  pub(crate) fn page_written(at: usize, len: usize) {
      use std::sync::atomic::Ordering::Relaxed;
@@ -54,7 +54,7 @@ index 21cc194..a72ecd3 100644
  
  /// The lowest start and the highest end of any span of [`Spans`] so far
  /// (the start is `u64::MAX` until there is one): what the runtime does to
-@@ -421,7 +415,7 @@ static SPANNED: [std::sync::atomic::AtomicU64; 2] = [
+@@ -612,7 +606,7 @@ static SPANNED: [std::sync::atomic::AtomicU64; 2] = [
  
  /// Since the start: slots whose view a newer view of other memory there
  /// made stale; ranges of memory noted as mapped, unmapped or written;
@@ -63,7 +63,7 @@ index 21cc194..a72ecd3 100644
  /// ranges; and made slots whose memory was found unmapped (made null).
  pub(crate) static STALE: [std::sync::atomic::AtomicU64; 5] =
      [const { std::sync::atomic::AtomicU64::new(0) }; 5];
-@@ -448,28 +442,15 @@ fn stale_rule() -> Rule {
+@@ -639,28 +633,15 @@ fn stale_rule() -> Rule {
  /// locks held: this locks one mutex of its own and calls nothing.
  pub(crate) fn remapped(at: usize, len: usize) {
      use std::sync::atomic::Ordering::Relaxed;
@@ -94,7 +94,7 @@ index 21cc194..a72ecd3 100644
  }
  
  /// Frames for which a slot a draw read through a table counts as a table's
-@@ -1212,13 +1193,13 @@ impl HostHeap {
+@@ -1486,13 +1467,13 @@ impl HostHeap {
      pub(crate) fn texture_slots_remapped(&self, frame: u64) -> usize {
          use std::sync::atomic::Ordering::Relaxed;
          self.texture_slots_page_written(frame);
@@ -111,7 +111,7 @@ index 21cc194..a72ecd3 100644
          };
          slots.sort_unstable();
          slots.dedup();
-@@ -1244,7 +1225,8 @@ impl HostHeap {
+@@ -1518,7 +1499,8 @@ impl HostHeap {
      /// are left to their draws. Counted either way; returns how many slots
      /// it made due.
      fn texture_slots_page_written(&self, frame: u64) -> usize {
@@ -122,10 +122,10 @@ index 21cc194..a72ecd3 100644
              return 0;
          }
 diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
-index 0e13822..427f52a 100644
+index 71101ac7c961b75c999ece821d84518b2fd7ec18..1fe8a5ff3035244a86bcb27733526b450e16455e 100644
 --- a/crates/victory-gpu/src/host.rs
 +++ b/crates/victory-gpu/src/host.rs
-@@ -7286,7 +7286,7 @@ impl Meter {
+@@ -10972,7 +10972,7 @@ impl Meter {
                       the draws that read them through tables, {} writes of tables' slots (due some frames later), {} slots taken out \
                       as read through a table, {parts} uploads of textures not all mapped ({tails} of them without their first page), \
                       {same} looks that found no more mapped; {} slots made stale by a newer view of other memory there, \
@@ -134,16 +134,16 @@ index 0e13822..427f52a 100644
                       {} made slots found unmapped and made null",
                      crate::draw::HEAP_TEXTURES_TABLED.load(Ordering::Relaxed),
                      crate::descriptor::host::TABLED_WRITES[0].load(Ordering::Relaxed),
-@@ -7301,10 +7301,10 @@ impl Meter {
+@@ -10987,10 +10987,10 @@ impl Meter {
              {
                  let mode = crate::watch::page_writes();
-                 let [writes, bytes, guarded, plain] = [0, 1, 2, 3].map(|i| crate::watch::WRITTEN[i].load(Ordering::Relaxed));
+                 let [writes, bytes, guarded, plain, told] = [0, 1, 2, 3, 4].map(|i| crate::watch::WRITTEN[i].load(Ordering::Relaxed));
 -                let [kept, dropped, slots, uploaded] =
 +                let [kept, widened, slots, uploaded] =
                      [0, 1, 2, 3].map(|i| crate::descriptor::host::PAGE_WRITES[i].load(Ordering::Relaxed));
                  tracing::info!(
--                    "writes behind the guards, since the start: {writes} DirectStorage writes into physical pages at addresses the                      title had mapped ({} MB); {guarded} guarded 64 KiB blocks of host copies lay under them ({}); {plain} reads to                      plain addresses finished ({}); {kept} ranges under texture views kept for the texture pass ({dropped} dropped);                      {slots} slots of placed textures held their bytes, {uploaded} of them uploaded before the write ({})                      (VICTORY_PAGE_WRITES: unset or guards opens the guarded blocks, 0 counts only, 1, slots, all)",
-+                    "writes behind the guards, since the start: {writes} DirectStorage writes into physical pages at addresses the                      title had mapped ({} MB); {guarded} guarded 64 KiB blocks of host copies lay under them ({}); {plain} reads to                      plain addresses finished ({}); {kept} ranges under texture views kept for the texture pass ({widened} widened at capacity);                      {slots} slots of placed textures held their bytes, {uploaded} of them uploaded before the write ({})                      (VICTORY_PAGE_WRITES: unset or guards opens the guarded blocks, 0 counts only, 1, slots, all)",
+-                    "writes behind the guards, since the start: {writes} DirectStorage writes into physical pages at addresses the                      title had mapped ({} MB); {guarded} guarded 64 KiB blocks of host copies lay under them ({}); {plain} reads to                      plain addresses finished ({}; {told} passed to the texture pass); {kept} ranges under texture views kept for the texture pass ({dropped} dropped);                      {slots} slots of placed textures held their bytes, {uploaded} of them uploaded before the write ({})                      (VICTORY_PAGE_WRITES: unset = guards and slots, plain reads' textures too; guards, 0 counts only, 1, slots, all)",
++                    "writes behind the guards, since the start: {writes} DirectStorage writes into physical pages at addresses the                      title had mapped ({} MB); {guarded} guarded 64 KiB blocks of host copies lay under them ({}); {plain} reads to                      plain addresses finished ({}; {told} passed to the texture pass); {kept} ranges under texture views kept for the texture pass ({widened} widened at capacity);                      {slots} slots of placed textures held their bytes, {uploaded} of them uploaded before the write ({})                      (VICTORY_PAGE_WRITES: unset = guards and slots, plain reads' textures too; guards, 0 counts only, 1, slots, all)",
                      bytes >> 20,
                      if mode & 1 != 0 { "opened, taken again" } else { "left as they were" },
                      if mode & 4 != 0 { "told as well" } else { "counted only" },

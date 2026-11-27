@@ -1,5 +1,5 @@
 diff --git a/crates/victory-gpu/src/pipeline/library.rs b/crates/victory-gpu/src/pipeline/library.rs
-index fac6f5917430..01296f9784ab 100644
+index 173a4a0608b61931478f7cf87d2857407cb32ae9..d6c4bb3a5de7d202dce18aa830c0e860eea6ff04 100644
 --- a/crates/victory-gpu/src/pipeline/library.rs
 +++ b/crates/victory-gpu/src/pipeline/library.rs
 @@ -10,7 +10,8 @@
@@ -21,7 +21,7 @@ index fac6f5917430..01296f9784ab 100644
  use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
  use std::sync::{Mutex, MutexGuard, OnceLock, RwLock};
  
-@@ -569,76 +570,86 @@
+@@ -592,76 +593,86 @@ pub(crate) fn pipeline(
  pub(crate) fn save(now: bool) {
      static LAST: Mutex<Option<std::time::Instant>> = Mutex::new(None);
      const SAVE_EVERY: std::time::Duration = std::time::Duration::from_secs(20);
@@ -30,8 +30,6 @@ index fac6f5917430..01296f9784ab 100644
 -        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
 -        if !now && last.is_some_and(|t| t.elapsed() < SAVE_EVERY) {
 -            return;
--        }
--        *last = Some(std::time::Instant::now());
 +    let Some(dir) = DIR.get() else { return };
 +    // Only one publisher may use the two temporary files. Periodic callers
 +    // are pipeline workers and can leave an in-progress save to its owner.
@@ -42,7 +40,8 @@ index fac6f5917430..01296f9784ab 100644
 +            Ok(last) => last,
 +            Err(std::sync::TryLockError::WouldBlock) => return,
 +            Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
-+        }
+         }
+-        *last = Some(std::time::Instant::now());
 +    };
 +    if !now && last.is_some_and(|t| t.elapsed() < SAVE_EVERY) {
 +        return;
@@ -98,7 +97,6 @@ index fac6f5917430..01296f9784ab 100644
 -            library.added.store(0, Ordering::Relaxed);
 -            SAVED.store(size as u64, Ordering::Relaxed);
 -            size
--        }
 +        // SAFETY: a plain query.
 +        let size = unsafe { library.library.GetSerializedSize() };
 +        let _call = call("serialise", "the whole library");
@@ -106,7 +104,7 @@ index fac6f5917430..01296f9784ab 100644
 +            tracing::warn!(error = %e, "host pipeline library not serialised");
 +            let _ = std::fs::remove_file(&tmp);
 +            return;
-+        }
+         }
 +        (size, added)
      };
 -    let used: Vec<String> = USED.lock().unwrap_or_else(|e| e.into_inner()).iter().flatten().cloned().collect();
@@ -137,7 +135,6 @@ index fac6f5917430..01296f9784ab 100644
 -            "host pipeline library saved"
 -        ),
 -        Err(e) => tracing::warn!(error = %e, "host pipeline library not saved"),
--    }
 +    if let Err(e) = replace_library(dir, &tmp) {
 +        tracing::warn!(error = %e, "host pipeline library not saved");
 +        return;
@@ -148,7 +145,7 @@ index fac6f5917430..01296f9784ab 100644
 +    if in_place && VIEW[0].load(Ordering::Relaxed) != 0 {
 +        REPLACED[1].store(crate::host::now_ms(), Ordering::Relaxed);
 +        REPLACED[0].fetch_add(1, Ordering::Relaxed);
-+    }
+     }
 +    crate::host::trail(|| {
 +        format!(
 +            "pipeline library: saved {bytes} bytes, {}",
@@ -165,7 +162,7 @@ index fac6f5917430..01296f9784ab 100644
  }
  
  /// Writes the library's `size` serialised bytes to the file `tmp`: through
-@@ -679,40 +690,90 @@
+@@ -702,41 +713,91 @@ fn write_atomically(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()>
  }
  
  /// Title pipeline keys requested by draws or dispatches (this run and the last).
@@ -245,7 +242,7 @@ index fac6f5917430..01296f9784ab 100644
  #[cfg(test)]
  mod tests {
      use super::*;
-+
+ 
 +    #[test]
 +    fn early_keys_survive_a_restart_without_a_driver_library() {
 +        let folder = tempfile::tempdir().unwrap();
@@ -274,6 +271,7 @@ index fac6f5917430..01296f9784ab 100644
 +        save_files(dir, None, &next, true);
 +        assert_eq!(std::fs::read(path).unwrap(), b"a\nb\nc");
 +    }
- 
++
      #[test]
      fn names_change_with_what_goes_into_the_pipeline() {
+         let a = name("graphics", b"root", &[b"vs", b"ps"], "state");

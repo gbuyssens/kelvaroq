@@ -1,8 +1,8 @@
 diff --git a/crates/victory-gpu/src/texture.rs b/crates/victory-gpu/src/texture.rs
-index 3f05635..f96b5ed 100644
+index 0eaaec5f2d02a6ac8a045286ef53dcf24a37743a..55febce7b18f3b8332375ded8fea520c4a0fb1dd 100644
 --- a/crates/victory-gpu/src/texture.rs
 +++ b/crates/victory-gpu/src/texture.rs
-@@ -448,6 +448,135 @@ fn with_title<R>(memory: *const u8, size: usize, f: impl FnOnce(&[u8]) -> R) ->
+@@ -562,6 +562,135 @@ fn with_title<R>(memory: *const u8, size: usize, f: impl FnOnce(&[u8]) -> R) ->
      })
  }
  
@@ -138,7 +138,7 @@ index 3f05635..f96b5ed 100644
  /// Staging buffers alive (also those only a list still holds) and their
  /// bytes.
  static STAGED: [std::sync::atomic::AtomicU64; 2] = [const { std::sync::atomic::AtomicU64::new(0) }; 2];
-@@ -1027,7 +1156,7 @@ impl Staging {
+@@ -1183,7 +1312,7 @@ impl Staging {
          // stays mapped (see `crate::watch::title_memory_reading`; without
          // it a page went between the asking and the read in runs 71 and
          // 74).
@@ -147,7 +147,7 @@ index 3f05635..f96b5ed 100644
              // Not waited for: while the runtime remaps title memory the
              // texture is read through the kernel instead, whole or not at
              // all (`no_wait`).
-@@ -1053,8 +1182,7 @@ impl Staging {
+@@ -1209,8 +1338,7 @@ impl Staging {
              last.partial = Some(frame);
              #[cfg(feature = "diagnostics")]
              crate::copystat::add(crate::copystat::C::TexHashed, size as u64);
@@ -157,7 +157,7 @@ index 3f05635..f96b5ed 100644
                  let hash = blake3::hash(read);
                  if last.hash == Some(hash) {
                      return false;
-@@ -1074,7 +1202,7 @@ impl Staging {
+@@ -1230,7 +1358,7 @@ impl Staging {
              return size;
          }
          if through_copy() {
@@ -166,7 +166,7 @@ index 3f05635..f96b5ed 100644
                  let hash = blake3::hash(tiled);
                  #[cfg(feature = "diagnostics")]
                  crate::copystat::add(crate::copystat::C::TexHashed, size as u64);
-@@ -1089,7 +1217,7 @@ impl Staging {
+@@ -1245,7 +1373,7 @@ impl Staging {
              });
          }
          // SAFETY: committed memory of the texture's layout size, and it
