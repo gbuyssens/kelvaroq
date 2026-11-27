@@ -2,6 +2,7 @@
 mod adapters;
 #[cfg(windows)]
 mod desktop;
+mod discord;
 #[cfg(windows)]
 mod gpu;
 mod image;

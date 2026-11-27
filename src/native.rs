@@ -88,6 +88,9 @@ pub(crate) fn run(
         let log = File::options().write(true).open("CONOUT$")?;
         game.stdout(log.try_clone()?).stderr(log);
     }
+    // Benches and scripts start this CLI directly: give their windows the
+    // launcher's Discord activity too (the launcher shows its own).
+    crate::discord::begin();
     let mut child = game
         .spawn()
         .with_context(|| format!("démarrage de {}", engine.display()))?;
