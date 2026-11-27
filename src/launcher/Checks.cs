@@ -5,7 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 
-namespace Kelvaroq {
+namespace Velkin {
 internal static class Checks {
     static void Check(bool ok) { if (!ok) throw new InvalidOperationException("Assertion failed"); }
     static void HardwareProfiles(string home,Preferences prefs) {
@@ -88,7 +88,7 @@ internal static class Checks {
             case "releases":
                 const string fixture = "{\"tag_name\":\"v0.10.1\",\"body\":\"## Changes\\r\\n- Faster startup\",\"html_url\":\"https://example.invalid/\",\"draft\":false,\"prerelease\":false}";
                 var release = Release.Parse(fixture);
-                Check(release.body == "Changes Faster startup" && release.Page == "https://github.com/fablinoo/kelvaroq/releases/tag/v0.10.1");
+                Check(release.body == "Changes Faster startup" && release.Page == "https://github.com/gbuyssens/velkin/releases/tag/v0.10.1");
                 Check(release.NewerThan("0.2.9") && !release.NewerThan("0.10.1") && !release.NewerThan("1.0.0"));
                 foreach (string tag in new[]{"0.3.0","v0.3","v0.03.0","v0.3.0-beta","v1.2.3.4","v1.2.3\n","v0.2.0/other"})
                     Check(Release.Number(tag) == null);
@@ -111,7 +111,7 @@ internal static class Checks {
                 Check(ReleaseCheck.Load(home).latest.NewerThan("0.2.0"));
                 break;
             case "engine":
-                var legacy = Path.Combine(root,"victory.exe"); var branded = Path.Combine(root,"kelvaroq-engine.exe");
+                var legacy = Path.Combine(root,"victory.exe"); var branded = Path.Combine(root,"velkin-engine.exe");
                 File.WriteAllText(legacy,"old"); Check(Product.EngineIn(root) == legacy);
                 File.WriteAllText(branded,"new"); Check(Product.EngineIn(root) == branded);
                 break;
@@ -195,7 +195,7 @@ internal static class Checks {
             case "recovery":
                 Directory.CreateDirectory(history);
                 var token = Guid.NewGuid().ToString("N");
-                var prefix = Path.Combine(root,".kelvaroq-" + token);
+                var prefix = Path.Combine(root,".velkin-" + token);
                 Directory.CreateDirectory(prefix + ".previous");
                 File.WriteAllText(Path.Combine(prefix + ".previous","save"),"last good");
                 Directory.CreateDirectory(prefix + ".incoming");

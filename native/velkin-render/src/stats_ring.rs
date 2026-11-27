@@ -49,7 +49,7 @@ unsafe impl Send for Mapping {}
 unsafe impl Sync for Mapping {}
 impl Mapping {
     fn open(pid: u32, create: bool) -> io::Result<Self> {
-        let name: Vec<u16> = format!("Local\\KelvaroqStats-{pid}\0")
+        let name: Vec<u16> = format!("Local\\VelkinStats-{pid}\0")
             .encode_utf16()
             .collect();
         // SAFETY: a terminated name, a paging-file mapping and a sized view.
@@ -236,7 +236,7 @@ mod tests {
     use super::*;
     #[test]
     fn reads_a_named_mapping_from_another_process() {
-        if let Ok(pid) = std::env::var("KELVAROQ_RING_TEST_PARENT") {
+        if let Ok(pid) = std::env::var("VELKIN_RING_TEST_PARENT") {
             let reader = Reader::open(pid.parse().unwrap()).unwrap();
             assert_eq!(reader.names, ["frame", "new_page_counter"]);
             assert_eq!(reader.read(1).unwrap(), [73, 991]);
@@ -251,7 +251,7 @@ mod tests {
                 "--exact",
                 "stats_ring::tests::reads_a_named_mapping_from_another_process",
             ])
-            .env("KELVAROQ_RING_TEST_PARENT", key.to_string())
+            .env("VELKIN_RING_TEST_PARENT", key.to_string())
             .status()
             .unwrap();
         assert!(status.success());

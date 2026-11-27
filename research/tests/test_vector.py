@@ -18,8 +18,8 @@ from unicorn.x86_const import (
     UC_X86_REG_YMM15,
 )
 
-from kelvaroq_reference.memory import GuestFault
-from kelvaroq_reference.vector import VectorMoves
+from velkin_reference.memory import GuestFault
+from velkin_reference.vector import VectorMoves
 
 
 class VectorTests(unittest.TestCase):

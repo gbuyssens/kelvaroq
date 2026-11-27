@@ -12,7 +12,7 @@ pub struct Packed128 {
 /// # Safety
 /// The caller must supply an initialized, aligned and writable `Packed128`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kelvaroq_packed128(op: u32, block: *mut Packed128) -> u32 {
+pub unsafe extern "C" fn velkin_packed128(op: u32, block: *mut Packed128) -> u32 {
     let Some(block) = (unsafe { block.as_mut() }) else {
         return 1;
     };
@@ -63,7 +63,7 @@ mod tests {
             second: [0; 4],
             mxcsr: 0x1f80,
         };
-        assert_eq!(unsafe { kelvaroq_packed128(1, &mut state) }, 0);
+        assert_eq!(unsafe { velkin_packed128(1, &mut state) }, 0);
         assert_eq!(state.first, [0x7fc0_0001, 0x8000_0000, 0, 0]);
         assert_eq!(state.mxcsr, 0x1f81);
         assert_eq!(host_mxcsr(), before);

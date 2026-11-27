@@ -11,7 +11,7 @@ index 2eb64848877e..f9c33b632bad 100644
 -    taken: u32,
 +    /// Dwords in `differs` and, when enabled, the companion ticket table.
 +    /// Both stay owned until all consumers of the plan have finished.
-+    results: kelvaroq_render::compare_slots::CompareSlots,
++    results: velkin_render::compare_slots::CompareSlots,
      /// Plans made and not done with (`Host::card_done`).
      out: u32,
      /// The fetch inside flights ([`inflight_fetch`]), if it is on and was
@@ -45,7 +45,7 @@ index 2eb64848877e..f9c33b632bad 100644
 -                taken: 0,
 +                // VICTORY_RECYCLE_COMPARE_SLOTS=1 reuses the slots of each
 +                // landed plan. Off until measured across comparable runs.
-+                results: kelvaroq_render::compare_slots::CompareSlots::new(
++                results: velkin_render::compare_slots::CompareSlots::new(
 +                    (RESULTS / 4) as u32,
 +                    std::env::var_os("VICTORY_RECYCLE_COMPARE_SLOTS").is_some_and(|v| v == "1"),
 +                ),

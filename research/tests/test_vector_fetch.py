@@ -17,8 +17,8 @@ from unicorn import (
 )
 from unicorn.x86_const import UC_X86_REG_RIP, UC_X86_REG_YMM0, UC_X86_REG_YMM1
 
-from kelvaroq_reference.cpu import Startup
-from kelvaroq_reference.vector import VectorMoves
+from velkin_reference.cpu import Startup
+from velkin_reference.vector import VectorMoves
 
 
 class VectorFetchTests(unittest.TestCase):

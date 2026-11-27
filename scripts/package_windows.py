@@ -67,7 +67,7 @@ def fetch_inputs():
                 if hashlib.file_digest(stream, "sha256").hexdigest() == expected:
                     continue
         request = urllib.request.Request(
-            url, headers={"User-Agent": "Kelvaroq packager"}
+            url, headers={"User-Agent": "Velkin packager"}
         )
         with urllib.request.urlopen(request, timeout=90) as response:
             content = response.read()
@@ -172,10 +172,10 @@ def rust_notices(archive, metadata):
 
 def package(archive, release, cache, metadata, native):
     mapping = {
-        "kelvaroq-launcher.exe": "Kelvaroq.exe",
-        "kelvaroq-desktop.exe": "kelvaroq-desktop.exe",
-        "kelvaroq.exe": "kelvaroq-cli.exe",
-        "kelvaroq_simd.dll": "kelvaroq_simd.dll",
+        "velkin-launcher.exe": "Velkin.exe",
+        "velkin-desktop.exe": "velkin-desktop.exe",
+        "velkin.exe": "velkin-cli.exe",
+        "velkin_simd.dll": "velkin_simd.dll",
     }
     for src, dest in mapping.items():
         data = (release / src).read_bytes()
@@ -187,7 +187,7 @@ def package(archive, release, cache, metadata, native):
     receipt = (native / "build.json").read_bytes()
     recorded = json.loads(receipt)["sha256"]
     for source, dest in (
-        ("kelvaroq-engine.exe", "native/kelvaroq-engine.exe"),
+        ("velkin-engine.exe", "native/velkin-engine.exe"),
         ("LICENSE", "notices/native/LICENSE"),
         ("source.zip", "sources/native.zip"),
     ):
@@ -199,9 +199,9 @@ def package(archive, release, cache, metadata, native):
     put(archive, "LICENSE.txt", (ROOT / "LICENSE").read_bytes())
     put(archive, "RELEASE_NOTES.md", (ROOT / "RELEASE_NOTES.md").read_bytes())
     # The reference CPU module imports Unicorn (GPLv2 only): GPL-2.0-or-later.
-    put(archive, "runtime/kelvaroq_reference/LICENSE", (ROOT / "research/LICENSE").read_bytes())
-    for module in sorted((ROOT / "research/kelvaroq_reference").glob("*.py")):
-        put(archive, "runtime/kelvaroq_reference/" + module.name, module.read_bytes())
+    put(archive, "runtime/velkin_reference/LICENSE", (ROOT / "research/LICENSE").read_bytes())
+    for module in sorted((ROOT / "research/velkin_reference").glob("*.py")):
+        put(archive, "runtime/velkin_reference/" + module.name, module.read_bytes())
     with zipfile.ZipFile(cache / PYTHON) as python:
         for member in python.namelist():
             put(archive, "runtime/" + member, python.read(member))
@@ -232,11 +232,11 @@ def package(archive, release, cache, metadata, native):
         archive,
         "notices/README.txt",
         (
-            b"Kelvaroq is free software under the GNU General Public License, version 3 or "
-            b"later (LICENSE.txt); its reference CPU module (runtime/kelvaroq_reference) is "
-            b"under version 2 or later (runtime/kelvaroq_reference/LICENSE).\n"
+            b"Velkin is free software under the GNU General Public License, version 3 or "
+            b"later (LICENSE.txt); its reference CPU module (runtime/velkin_reference) is "
+            b"under version 2 or later (runtime/velkin_reference/LICENSE).\n"
             b"Native play uses VIctory and victory-fork (both GPL-3.0-or-later) "
-            b"with Kelvaroq rendering code. "
+            b"with Velkin rendering code. "
             b"See notices/native/LICENSE, native/build.json and sources/native.zip.\n"
             b"The reference CPU uses CPython 3.14.10 (runtime/LICENSE.txt and notices/python), "
             b"Capstone 5.0.7 (notices/capstone), and Unicorn Engine 2.1.4 "
@@ -252,7 +252,7 @@ def package(archive, release, cache, metadata, native):
 def verify(path):
     # Exercise the extracted archive from another working directory without an
     # installed Python, site-packages, or a development DLL on the search path.
-    with tempfile.TemporaryDirectory(prefix="kelvaroq-portable-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="velkin-portable-") as tmp:
         copied = Path(tmp) / "application"
         with zipfile.ZipFile(path) as archive:
             archive.extractall(copied)
@@ -264,35 +264,35 @@ def verify(path):
         env["PATH"] = str(Path(env["SystemRoot"]) / "System32")
         worker = [str(copied / "runtime/python.exe"), "-I", "-X", "utf8"]
         subprocess.run(
-            [*worker, "-m", "kelvaroq_reference", "--help"],
+            [*worker, "-m", "velkin_reference", "--help"],
             check=True,
             cwd=tmp,
             env=env,
         )
         check = (
-            "import pathlib, sys, capstone, unicorn, kelvaroq_reference;"
+            "import pathlib, sys, capstone, unicorn, velkin_reference;"
             "base=pathlib.Path(sys.executable).parent;"
             "assert all(pathlib.Path(p).is_relative_to(base) for p in sys.path);"
             "assert all(pathlib.Path(m.__file__).is_relative_to(base) for m in "
-            "(capstone, unicorn, kelvaroq_reference));"
+            "(capstone, unicorn, velkin_reference));"
             "uc=unicorn.Uc(unicorn.UC_ARCH_X86,unicorn.UC_MODE_64);"
             "cs=capstone.Cs(capstone.CS_ARCH_X86,capstone.CS_MODE_64);"
             "assert next(cs.disasm_lite(bytes([0xc3]),0))[2]=='ret';"
-            "import ctypes; ctypes.CDLL(str(base.parent/'kelvaroq_simd.dll'))"
+            "import ctypes; ctypes.CDLL(str(base.parent/'velkin_simd.dll'))"
         )
         subprocess.run([*worker, "-c", check], check=True, cwd=tmp, env=env)
         subprocess.run(
-            [str(copied / "kelvaroq-cli.exe"), "--version"],
+            [str(copied / "velkin-cli.exe"), "--version"],
             check=True,
             cwd=tmp,
             env=env,
         )
         subprocess.run(
-            [str(copied / "Kelvaroq.exe"), "--ui-demo", "--capture", str(Path(tmp) / "screens")],
+            [str(copied / "Velkin.exe"), "--ui-demo", "--capture", str(Path(tmp) / "screens")],
             check=True, cwd=tmp, env=env,
         )
         subprocess.run(
-            [str(copied / "native/kelvaroq-engine.exe"), "run", "--help"],
+            [str(copied / "native/velkin-engine.exe"), "run", "--help"],
             check=True,
             cwd=tmp,
             env=env,
@@ -324,7 +324,7 @@ def main():
     )
     out = TARGET / "dist"
     out.mkdir(exist_ok=True)
-    target = out / f"Kelvaroq-{version}-windows-x64.zip"
+    target = out / f"Velkin-{version}-windows-x64.zip"
     with tempfile.TemporaryDirectory(dir=out) as staging:
         candidate = Path(staging) / target.name
         with zipfile.ZipFile(candidate, "w") as archive:

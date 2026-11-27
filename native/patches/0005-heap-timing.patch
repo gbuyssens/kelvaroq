@@ -29,7 +29,7 @@ index d6d5fc0..eefcfdc 100644
 +impl HeapTiming {
 +    fn enabled() -> bool {
 +        static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-+        *ENABLED.get_or_init(|| std::env::var_os("KELVAROQ_HEAP_TIMINGS").is_some_and(|v| v == "1"))
++        *ENABLED.get_or_init(|| std::env::var_os("VELKIN_HEAP_TIMINGS").is_some_and(|v| v == "1"))
 +    }
 +
 +    fn new(start: std::time::Instant) -> Self {
@@ -174,7 +174,7 @@ index d6d5fc0..eefcfdc 100644
 +            let [ranges, slots_us, spans_us, refresh_lock, refresh, queue, work] = t.phase_us;
 +            // I/O occurs outside the measured pass and outside the shared locks.
 +            let _ = writeln!(std::io::stderr().lock(),
-+                "KELVAROQ_HEAP_TIMINGS frame={frame} full_scan={} slots={} views={views} spans={} refreshes={} texture_due={} texture_visited={} ranges_wait_us={ranges} slots_us={slots_us} spans_us={spans_us} refresh_wait_us={refresh_lock} refresh_record_us={refresh} texture_queue_us={queue} texture_work_us={work} total_us={}",
++                "VELKIN_HEAP_TIMINGS frame={frame} full_scan={} slots={} views={views} spans={} refreshes={} texture_due={} texture_visited={} ranges_wait_us={ranges} slots_us={slots_us} spans_us={spans_us} refresh_wait_us={refresh_lock} refresh_record_us={refresh} texture_queue_us={queue} texture_work_us={work} total_us={}",
 +                u8::from(full_scan), slots.len(), spans.len(), spans.len() - skipped,
 +                t.due_textures, t.visited_textures, t.elapsed_us);
 +        }

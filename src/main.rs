@@ -92,14 +92,14 @@ impl BootOptions {
         let mut command = Command::new(&python);
         command
             .env(
-                "KELVAROQ_SIMD_LIB",
+                "VELKIN_SIMD_LIB",
                 program.with_file_name(format!(
-                    "{}kelvaroq_simd{}",
+                    "{}velkin_simd{}",
                     std::env::consts::DLL_PREFIX,
                     std::env::consts::DLL_SUFFIX
                 )),
             )
-            .args(["-I", "-X", "utf8", "-m", "kelvaroq_reference"])
+            .args(["-I", "-X", "utf8", "-m", "velkin_reference"])
             .arg(&image)
             .arg(self.console)
             .stdin(Stdio::piped());
@@ -115,7 +115,7 @@ impl BootOptions {
         if windowed {
             #[cfg(windows)]
             {
-                command.env("KELVAROQ_LIVE_LOG", "1");
+                command.env("VELKIN_LIVE_LOG", "1");
                 return desktop::run(command, &plan);
             }
             #[cfg(not(windows))]
@@ -206,7 +206,7 @@ fn main() -> ExitCode {
     match run(Args::parse()) {
         Ok(status) => status,
         Err(e) => {
-            eprintln!("kelvaroq: {e:#}");
+            eprintln!("velkin: {e:#}");
             ExitCode::FAILURE
         }
     }
@@ -220,7 +220,7 @@ mod argument_tests {
     fn experimental_profile_is_opt_in_and_native_only() {
         for (flags, enabled) in [(vec![], false), (vec!["--experimental-render"], true)] {
             let args = Args::try_parse_from(
-                ["kelvaroq", "play"]
+                ["velkin", "play"]
                     .into_iter()
                     .chain(flags)
                     .chain(["--", "jeu"]),
@@ -232,7 +232,7 @@ mod argument_tests {
         }
         for other in ["--reference", "--host-topology"] {
             assert!(
-                Args::try_parse_from(["kelvaroq", "play", "--experimental-render", other, "jeu"])
+                Args::try_parse_from(["velkin", "play", "--experimental-render", other, "jeu"])
                     .is_err()
             );
         }

@@ -82,14 +82,14 @@ class BuildNativeTests(unittest.TestCase):
                 self.assertEqual(
                     names,
                     {
-                        "kelvaroq-engine/sample",
-                        "kelvaroq-engine/crates/kelvaroq-render/Cargo.toml",
-                        "kelvaroq-engine/crates/kelvaroq-render/src/lib.rs",
+                        "velkin-engine/sample",
+                        "velkin-engine/crates/velkin-render/Cargo.toml",
+                        "velkin-engine/crates/velkin-render/src/lib.rs",
                     },
                 )
-                self.assertEqual(contents.read("kelvaroq-engine/sample"), b"three\n")
+                self.assertEqual(contents.read("velkin-engine/sample"), b"three\n")
                 self.assertEqual(
-                    contents.read("kelvaroq-engine/crates/kelvaroq-render/src/lib.rs"),
+                    contents.read("velkin-engine/crates/velkin-render/src/lib.rs"),
                     (self.crate / "src/lib.rs").read_bytes(),
                 )
             if previous:
@@ -101,7 +101,7 @@ class BuildNativeTests(unittest.TestCase):
         self.assertEqual((self.source / "sample").read_bytes(), b"personal edit\n")
 
     def test_source_archive_locks_the_bundled_render_version(self):
-        lock = b'[[package]]\nname = "kelvaroq-render"\nversion = "0.1.0"\n'
+        lock = b'[[package]]\nname = "velkin-render"\nversion = "0.1.0"\n'
         other = b'\n[[package]]\nname = "other"\nversion = "0.1.0"\n'
         (self.source / "Cargo.lock").write_bytes(lock + other)
         (self.crate / "Cargo.toml").write_bytes(b'[package]\nversion = "0.2.0"\n')

@@ -11,9 +11,9 @@ from pathlib import Path
 from unicorn import UC_HOOK_CODE
 from unicorn.x86_const import UC_X86_REG_RAX, UC_X86_REG_RCX
 
-from kelvaroq_reference.cpu import Startup
-from kelvaroq_reference.memory import read_guest
-from kelvaroq_reference.topology import manifest_smt_enabled
+from velkin_reference.cpu import Startup
+from velkin_reference.memory import read_guest
+from velkin_reference.topology import manifest_smt_enabled
 
 if __package__:
     from .check_archive_readers import IMAGE_HASH, require
@@ -104,7 +104,7 @@ def run(executable, cli, console):
         plan["sha256"] == IMAGE_HASH,
         "unknown executable revision for startup table checks",
     )
-    os.environ["KELVAROQ_SIMD_LIB"] = str(cli.with_name("kelvaroq_simd.dll"))
+    os.environ["VELKIN_SIMD_LIB"] = str(cli.with_name("velkin_simd.dll"))
     vm = Startup(
         plan,
         executable.read_bytes(),
@@ -138,7 +138,7 @@ def run(executable, cli, console):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
-    parser.add_argument("--cli", type=Path, default=Path("target/release/kelvaroq.exe"))
+    parser.add_argument("--cli", type=Path, default=Path("target/release/velkin.exe"))
     parser.add_argument(
         "--console", choices=("series-s", "series-x"), default="series-x"
     )

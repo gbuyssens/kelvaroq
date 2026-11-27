@@ -89,7 +89,7 @@ def read_log(stream, run):
             run.series[key].append(float(match[1]) * scale)
     for line in stream:
         line = ANSI.sub("", line)
-        if "KELVAROQ_PRESENT " in line:
+        if "VELKIN_PRESENT " in line:
             match = re.search(r"\binterval_us=(\d+)", line)
             if match and int(match[1]) > 0:
                 run.exact.append(int(match[1]) / 1000)
@@ -209,7 +209,7 @@ strong{font-size:32px}small{font-size:15px}table{border-collapse:collapse;width:
 i{height:7px;background:#263e4d}b{display:block;height:100%;background:#9fe3c8}em{font-style:normal}
 @media(max-width:780px){main{grid-auto-flow:row}}@media print{@page{size:A3 landscape;margin:8mm}body{margin:0;font-size:11px}h3{margin:8px 0}article{padding:10px}.bar{margin:2px 0}*{print-color-adjust:exact}}"""
     return ('<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-            '<title>Kelvaroq · Rapport de performances</title><style>'+css+'</style><h1>Rapport de performances</h1>'
+            '<title>Velkin · Rapport de performances</title><style>'+css+'</style><h1>Rapport de performances</h1>'
             '<p>Objectif 30 images/s · 33,33 ms. Le titre, le fil d’envoi et le GPU peuvent travailler simultanément. '
             'Les compteurs du CSV sont moyennés par image disponible. Les compteurs du journal sont moyennés par fenêtre publiée.</p><main>'
             +''.join(panel(r,scale) for r in runs)+'</main></html>')

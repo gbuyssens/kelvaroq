@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kelvaroq-reference"
+name = "velkin-reference"
 version = "0.2.0"
-description = "Single-threaded x64 startup reference for Kelvaroq"
+description = "Single-threaded x64 startup reference for Velkin"
 requires-python = ">=3.10"
 # GPL-2.0-or-later, not 3: it imports Unicorn, which is GPLv2 only.
 license = { text = "GPL-2.0-or-later" }
@@ -18,4 +18,4 @@ dev = ["ruff==0.17.6"]
 select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.setuptools]
-packages = ["kelvaroq_reference"]
+packages = ["velkin_reference"]

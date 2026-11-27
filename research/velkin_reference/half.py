@@ -20,7 +20,7 @@ class HalfBlock(ctypes.Structure):
 
 @cache
 def native_half(path):
-    function = getattr(native_library(path), "kelvaroq_half", None)
+    function = getattr(native_library(path), "velkin_half", None)
     if function is None:
         raise GuestFault("half conversion requires the x64 F16C backend")
     function.argtypes = [ctypes.c_uint32, ctypes.c_uint8, ctypes.POINTER(HalfBlock)]
@@ -43,7 +43,7 @@ def execute_half(cpu, insn):
     payload = operand_bytes(cpu, insn, source, width).ljust(32, b"\x00")
     mxcsr = cpu.reg_read(UC_X86_REG_MXCSR)
     state = HalfBlock.from_buffer_copy(payload + mxcsr.to_bytes(4, "little"))
-    convert = native_half(os.environ.get("KELVAROQ_SIMD_LIB"))
+    convert = native_half(os.environ.get("VELKIN_SIMD_LIB"))
     status = convert(direction, imm, ctypes.byref(state))
     if status == 2:
         raise GuestFault("host CPU does not support AVX/F16C")

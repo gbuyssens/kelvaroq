@@ -90,12 +90,12 @@ index f96b5ed..035ba10 100644
 +        .and_then(|v| v.trim().parse::<u64>().ok())
 +        .and_then(|mb| mb.checked_mul(1 << 20))
 +});
-+static SPARE: LazyLock<Mutex<kelvaroq_render::upload_pool::Pool<Spare>>> =
-+    LazyLock::new(|| Mutex::new(kelvaroq_render::upload_pool::Pool::new(STAGING_POOL_BYTES.unwrap_or(256 << 20))));
++static SPARE: LazyLock<Mutex<velkin_render::upload_pool::Pool<Spare>>> =
++    LazyLock::new(|| Mutex::new(velkin_render::upload_pool::Pool::new(STAGING_POOL_BYTES.unwrap_or(256 << 20))));
 +
 +fn staging_class(total: u64, budget: Option<u64>) -> Option<u64> {
 +    if let Some(limit) = budget {
-+        let size = kelvaroq_render::upload_pool::class(total);
++        let size = velkin_render::upload_pool::class(total);
 +        (size <= limit).then_some(size)
 +    } else {
 +        let size = total.max(64 << 10).checked_next_power_of_two()?;
@@ -244,8 +244,8 @@ index f96b5ed..035ba10 100644
 +                println!("{name}: staging {:.1} MB made and written {:>9.1} us each ({})", total as f64 / 1e6, us, if unzeroed { "staging policy (VICTORY_NOT_ZEROED)" } else { "default allocation" });
 +            }
 +            // From the pool: made once, then taken and written.
-+            let mut pool = kelvaroq_render::upload_pool::Pool::new(u64::MAX);
-+            let capacity = kelvaroq_render::upload_pool::class(total);
++            let mut pool = velkin_render::upload_pool::Pool::new(u64::MAX);
++            let capacity = velkin_render::upload_pool::class(total);
 +            for _ in 0..COUNT {
 +                let (b, d) = host.staging_upload_buffer(capacity, total).unwrap();
 +                assert!(pool.give(capacity, Spare(b, d as usize)).is_none());

@@ -35,7 +35,7 @@ impl Drop for Handle {
 fn fetch(buffer: &mut [u8]) -> Result<usize> {
     let start = Instant::now();
     let agent =
-        windows::core::HSTRING::from(concat!("Kelvaroq-Launcher/", env!("CARGO_PKG_VERSION")));
+        windows::core::HSTRING::from(concat!("Velkin-Launcher/", env!("CARGO_PKG_VERSION")));
     // Synchronous calls borrow these handles and buffers only for their duration.
     unsafe {
         let session = Handle::new(WinHttpOpen(
@@ -50,7 +50,7 @@ fn fetch(buffer: &mut [u8]) -> Result<usize> {
         let request = Handle::new(WinHttpOpenRequest(
             connection.0,
             w!("GET"),
-            w!("/repos/fablinoo/kelvaroq/releases/latest"),
+            w!("/repos/gbuyssens/velkin/releases/latest"),
             PCWSTR::null(),
             PCWSTR::null(),
             ptr::null(),
@@ -103,7 +103,7 @@ fn fetch(buffer: &mut [u8]) -> Result<usize> {
 /// # Safety
 /// The caller must supply a writable buffer of the given length for this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn kelvaroq_latest_release(buffer: *mut u8, length: u32) -> u32 {
+pub unsafe extern "system" fn velkin_latest_release(buffer: *mut u8, length: u32) -> u32 {
     if buffer.is_null() || length == 0 || length > 512 * 1024 {
         return 0;
     }

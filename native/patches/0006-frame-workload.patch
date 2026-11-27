@@ -6,11 +6,11 @@ index 48c5716..0e13822 100644
              if let Some((buffer, footprint)) = capture {
                  crate::capture::save_read_back(frame, &buffer, &footprint);
              }
--            let timing = kelvaroq_render::pacing::start();
-+            let timing = kelvaroq_render::pacing::start_present();
+-            let timing = velkin_render::pacing::start();
++            let timing = velkin_render::pacing::start_present();
              let status = p.swap_chain.Present(0, DXGI_PRESENT(0));
              if let Some(start) = timing {
-                 kelvaroq_render::pacing::present(frame, start, std::time::Instant::now(), status.0);
+                 velkin_render::pacing::present(frame, start, std::time::Instant::now(), status.0);
 diff --git a/crates/victory-gpu/src/list.rs b/crates/victory-gpu/src/list.rs
 index 516ba26..ab12ca3 100644
 --- a/crates/victory-gpu/src/list.rs
@@ -38,11 +38,11 @@ index 60ed05c..873f953 100644
      }
      let frame = crate::frame::current();
 +    #[cfg(windows)]
-+    if kelvaroq_render::pacing::workload_enabled()
++    if velkin_render::pacing::workload_enabled()
 +        && let Some(mesh) = p.shaders.iter().find(|s| s.stage == "mesh")
 +        && let Some(pixel) = p.shaders.iter().find(|s| s.stage == "pixel")
 +    {
-+        kelvaroq_render::pacing::workload_bind(
++        velkin_render::pacing::workload_bind(
 +            crate::queue::presented(),
 +            frame,
 +            &mesh.hash,
@@ -76,7 +76,7 @@ index bccef27..f1b7b36 100644
 +        )
 +    };
 +    #[cfg(windows)]
-+    if kelvaroq_render::pacing::workload_enabled() {
++    if velkin_render::pacing::workload_enabled() {
 +        // Only PresentX drains list counters. Serialize snapshots and carry forward
 +        // the drained totals, leaving command-recording threads unchanged.
 +        static DRAINED: std::sync::Mutex<(u64, u64)> = std::sync::Mutex::new((0, 0));
@@ -87,7 +87,7 @@ index bccef27..f1b7b36 100644
 +        if checkpoint.is_some() {
 +            *drained = totals;
 +        }
-+        kelvaroq_render::pacing::workload_queue(
++        velkin_render::pacing::workload_queue(
 +            frame,
 +            totals.0,
 +            crate::draw::drawn(),

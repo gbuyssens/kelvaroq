@@ -43,7 +43,7 @@ def main():
         host_topology=options.host_topology,
     )
     completed = []
-    if os.environ.get("KELVAROQ_LIVE_LOG") == "1":
+    if os.environ.get("VELKIN_LIVE_LOG") == "1":
         started = time.monotonic()
 
         def log(message):

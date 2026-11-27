@@ -49,7 +49,7 @@ index 21cc194..a72ecd3 100644
 +/// Bounded at 2^15 ranges: at capacity the two nearest are merged, so a
 +/// pass still sees every byte written since the last one (the queue used
 +/// to be emptied, losing every range in it).
-+type Ranges = kelvaroq_render::dirty_ranges::DirtyRanges<{ 1 << 15 }>;
++type Ranges = velkin_render::dirty_ranges::DirtyRanges<{ 1 << 15 }>;
 +static REMAPPED: Mutex<Ranges> = Mutex::new(Ranges::new());
  
  /// The lowest start and the highest end of any span of [`Spans`] so far

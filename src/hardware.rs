@@ -215,7 +215,7 @@ impl Machine {
 /// # Safety
 /// The caller supplies a writable buffer of at least `capacity` bytes.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn kelvaroq_hardware(output: *mut u8, capacity: usize) -> usize {
+pub unsafe extern "system" fn velkin_hardware(output: *mut u8, capacity: usize) -> usize {
     if output.is_null() {
         return 0;
     }

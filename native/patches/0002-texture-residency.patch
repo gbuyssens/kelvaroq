@@ -42,7 +42,7 @@ index a3e7c16..3f05635 100644
 +    let size = s.as_ref().map_or(0, |s| s.layout.size as usize);
 +    let fully_mapped = || s.is_none_or(|s| committed(s.memory, size));
 +    let again = if batched_residency() {
-+        kelvaroq_render::residency::heap_texture_revisit(frame, partial, fully_mapped)
++        velkin_render::residency::heap_texture_revisit(frame, partial, fully_mapped)
 +    } else {
 +        let whole = fully_mapped();
 +        partial.map(|bytes| (frame + 1, bytes)).or_else(|| (!whole).then_some((frame + 120, 0)))
@@ -105,7 +105,7 @@ index a3e7c16..3f05635 100644
 +
 +fn probe_blocks(addresses: &[usize], present: &mut [bool]) {
 +    // SAFETY: zero is a valid initial value for working-set query entries.
-+    let mut info: [WorkingPage; kelvaroq_render::residency::MAX_BATCH] = unsafe { std::mem::zeroed() };
++    let mut info: [WorkingPage; velkin_render::residency::MAX_BATCH] = unsafe { std::mem::zeroed() };
 +    let entries = &mut info[..addresses.len()];
 +    for (entry, &address) in entries.iter_mut().zip(addresses) {
 +        entry.VirtualAddress = address as *mut _;
@@ -118,7 +118,7 @@ index a3e7c16..3f05635 100644
 +
 +/// `VICTORY_BATCHED_RESIDENCY=0` reprend les sondes bloc par bloc du fork
 +/// et vérifie toute la texture même si son placement partiel est connu.
-+/// Le défaut (1) conserve la mesure Kelvaroq de 6,57 µs pour 256 blocs
++/// Le défaut (1) conserve la mesure Velkin de 6,57 µs pour 256 blocs
 +/// présents, contre 104,3 µs avec les appels individuels.
 +fn batched_residency() -> bool {
 +    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -155,7 +155,7 @@ index a3e7c16..3f05635 100644
          // for each of its missing pages, every frame it stayed due: 1,663
          // textures "uploaded in part" kept the pass over the heap's views at
          // 90-160 ms a frame (run 81). `VICTORY_MAPPED_BY_PAGE=1`: by page.
-+        return kelvaroq_render::residency::heap_mapped_bytes(start, len, probe_blocks);
++        return velkin_render::residency::heap_mapped_bytes(start, len, probe_blocks);
 +    }
 +    if !committed(at, 1) && !committed((end - 1) as *const u8, 1) {
 +        return 0;
@@ -232,7 +232,7 @@ index a3e7c16..3f05635 100644
 +        let memory = SampleMemory::new(263, true);
 +        let start = memory.0 as usize + 12_345;
 +        let len = 260 * BLOCK_BYTES + 89;
-+        let grouped = kelvaroq_render::residency::mapped_block_bytes(start, len, super::probe_blocks);
++        let grouped = velkin_render::residency::mapped_block_bytes(start, len, super::probe_blocks);
 +        assert_eq!(grouped, (len - 65 * BLOCK_BYTES) as u64);
 +        assert_eq!(grouped, individual_samples(start, len));
 +        // If the Windows query fails, every requested page still takes the safe read path.
@@ -247,7 +247,7 @@ index a3e7c16..3f05635 100644
 +        {
 +            return 0;
 +        }
-+        kelvaroq_render::residency::mapped_block_bytes(start, len, super::probe_blocks)
++        velkin_render::residency::mapped_block_bytes(start, len, super::probe_blocks)
 +    }
 +
 +    #[test]
@@ -258,7 +258,7 @@ index a3e7c16..3f05635 100644
 +        let mut addresses = [(base + 75, BLOCK_BYTES - 79), (base + 75, 2 * BLOCK_BYTES), (base + BLOCK_BYTES + 9, 11)];
 +        let check = |ranges: &[(usize, usize)]| {
 +            for &(start, len) in ranges {
-+                assert_eq!(kelvaroq_render::residency::heap_mapped_bytes(start, len, super::probe_blocks),
++                assert_eq!(velkin_render::residency::heap_mapped_bytes(start, len, super::probe_blocks),
 +                           prior_heap_estimate(start, len));
 +            }
 +        };
@@ -279,7 +279,7 @@ index a3e7c16..3f05635 100644
 +    #[test]
 +    #[ignore = "timed Windows heap-slot preparation"]
 +    fn benchmark_heap_slot_probes() {
-+        use kelvaroq_render::residency::{heap_mapped_bytes, heap_texture_revisit};
++        use velkin_render::residency::{heap_mapped_bytes, heap_texture_revisit};
 +        use std::{hint::black_box, time::Instant};
 +        use windows_sys::Win32::System::Memory::{MEM_DECOMMIT, VirtualFree};
 +        for (blocks, missing) in [(1, None), (64, None), (64, Some(2)), (64, Some(61))] {
@@ -330,7 +330,7 @@ index a3e7c16..3f05635 100644
 +                        let timer = std::time::Instant::now();
 +                        for _ in 0..iterations {
 +                            let bytes = if index == 0 { individual_samples(start, len) } else {
-+                                kelvaroq_render::residency::mapped_block_bytes(start, len, super::probe_blocks)
++                                velkin_render::residency::mapped_block_bytes(start, len, super::probe_blocks)
 +                            };
 +                            assert_eq!(std::hint::black_box(bytes), expected);
 +                        }

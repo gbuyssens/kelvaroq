@@ -15,8 +15,8 @@ class FrameReport(unittest.TestCase):
             "texture refresh time 7 ms/frame\n"
             "submit thread per frame in ms: work and other time 86.0, awaiting relay 12.0, "
             "work by stage: descriptors 8.0, watch and coherence 52.0, other 26.0\n"
-            "KELVAROQ_PRESENT frame=8 interval_us=31000\n"
-            "KELVAROQ_PRESENT frame=9 interval_us=40000\n"
+            "VELKIN_PRESENT frame=8 interval_us=31000\n"
+            "VELKIN_PRESENT frame=9 interval_us=40000\n"
         ), run)
         self.assertEqual(run.exact, [31, 40])
         self.assertEqual(run.windows, [100])

@@ -88,7 +88,7 @@ mod launcher {
         {
             let launcher = std::env::current_exe()?;
             let args: Vec<_> = args.collect();
-            let status = Command::new(launcher.with_file_name("kelvaroq-desktop.exe"))
+            let status = Command::new(launcher.with_file_name("velkin-desktop.exe"))
                 .env("VICTORY_LAUNCHER_EXE", &launcher)
                 .args(&args)
                 .status()?;
@@ -129,7 +129,7 @@ mod launcher {
         };
         let cli = companion(&std::env::current_exe()?)?;
         let mut play = Command::new(&cli);
-        play.env("KELVAROQ_DESKTOP_LOG", "1").arg("play");
+        play.env("VELKIN_DESKTOP_LOG", "1").arg("play");
         if experimental {
             play.arg("--experimental-render");
         }
@@ -167,21 +167,21 @@ mod launcher {
         let directory = launcher
             .parent()
             .context("Dossier du lanceur introuvable")?;
-        let packaged = directory.join("kelvaroq-cli.exe");
+        let packaged = directory.join("velkin-cli.exe");
         if packaged.is_file() {
             return Ok(packaged);
         }
-        // The packaged launcher is itself named Kelvaroq.exe on case-insensitive NTFS.
-        let development = directory.join("kelvaroq.exe");
+        // The packaged launcher is itself named Velkin.exe on case-insensitive NTFS.
+        let development = directory.join("velkin.exe");
         if launcher
             .file_name()
-            .is_some_and(|name| name.eq_ignore_ascii_case(OsStr::new("kelvaroq-launcher.exe")))
+            .is_some_and(|name| name.eq_ignore_ascii_case(OsStr::new("velkin-launcher.exe")))
             && development.is_file()
         {
             return Ok(development);
         }
         bail!(
-            "Le moteur kelvaroq-cli.exe est introuvable dans {}. Extrayez tout le paquet dans un même dossier.",
+            "Le moteur velkin-cli.exe est introuvable dans {}. Extrayez tout le paquet dans un même dossier.",
             directory.display()
         )
     }
@@ -192,7 +192,7 @@ mod launcher {
             MessageBoxW(
                 None,
                 &HSTRING::from(text),
-                w!("Kelvaroq"),
+                w!("Velkin"),
                 MB_OK | MB_ICONERROR,
             );
         }
@@ -223,7 +223,7 @@ mod launcher {
             CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE).ok()?;
             let _apartment = Apartment;
             let instance = GetModuleHandleW(None)?.into();
-            let class = w!("KelvaroqLaunchForm");
+            let class = w!("VelkinLaunchForm");
             let style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
             let cls = WNDCLASSW {
                 lpfnWndProc: Some(window_proc),
@@ -247,7 +247,7 @@ mod launcher {
             let form = Form(CreateWindowExW(
                 WS_EX_DLGMODALFRAME,
                 class,
-                w!("Kelvaroq — Ouvrir"),
+                w!("Velkin — Ouvrir"),
                 style,
                 (GetSystemMetrics(SM_CXSCREEN) - width) / 2,
                 (GetSystemMetrics(SM_CYSCREEN) - height) / 2,
@@ -374,7 +374,7 @@ mod launcher {
         }
 
         fn desktop_test(suite: &str) {
-            let exe = std::path::Path::new(env!("OUT_DIR")).join("kelvaroq-desktop.exe");
+            let exe = std::path::Path::new(env!("OUT_DIR")).join("velkin-desktop.exe");
             let result = Command::new(exe)
                 .args(["--self-test", suite])
                 .output()
@@ -451,14 +451,14 @@ mod launcher {
             };
             let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
             let dir = std::env::temp_dir()
-                .join(format!("kelvaroq-launcher-{}-{nonce}", std::process::id()));
+                .join(format!("velkin-launcher-{}-{nonce}", std::process::id()));
             fs::create_dir(&dir)?;
-            let packaged_launcher = dir.join("Kelvaroq.exe");
-            let development_launcher = dir.join("kelvaroq-launcher.exe");
-            let packaged_cli = dir.join("kelvaroq-cli.exe");
+            let packaged_launcher = dir.join("Velkin.exe");
+            let development_launcher = dir.join("velkin-launcher.exe");
+            let packaged_cli = dir.join("velkin-cli.exe");
             fs::write(&packaged_launcher, [])?;
             assert!(companion(&packaged_launcher).is_err());
-            assert_eq!(companion(&development_launcher)?, dir.join("kelvaroq.exe"));
+            assert_eq!(companion(&development_launcher)?, dir.join("velkin.exe"));
             fs::write(&packaged_cli, [])?;
             assert_eq!(companion(&development_launcher)?, packaged_cli);
             assert_eq!(companion(&packaged_launcher)?, packaged_cli);

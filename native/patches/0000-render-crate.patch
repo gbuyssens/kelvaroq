@@ -7,7 +7,7 @@ index 29bab8c..790eaf8 100644
  checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
  
 +[[package]]
-+name = "kelvaroq-render"
++name = "velkin-render"
 +version = "0.1.0"
 +
  [[package]]
@@ -17,7 +17,7 @@ index 29bab8c..790eaf8 100644
  dependencies = [
   "anyhow",
   "blake3",
-+ "kelvaroq-render",
++ "velkin-render",
   "tempfile",
   "tracing",
   "victory-formats",
@@ -29,7 +29,7 @@ index d380f3a..f0057da 100644
  publish.workspace = true
  
  [dependencies]
-+kelvaroq-render = { path = "../kelvaroq-render" }
++velkin-render = { path = "../velkin-render" }
  blake3.workspace = true
  zlib-rs.workspace = true
  tracing.workspace = true

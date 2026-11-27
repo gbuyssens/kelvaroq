@@ -88,7 +88,7 @@ unsafe extern "system" fn events(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -
 fn window(mut feed: Feed) -> Result<()> {
     crate::preload::visual::enable_dpi();
     unsafe {
-        let class = w!("KelvaroqPerformanceMonitor");
+        let class = w!("VelkinPerformanceMonitor");
         let instance = GetModuleHandleW(None)?.into();
         RegisterClassW(&WNDCLASSW {
             lpfnWndProc: Some(events),
@@ -109,7 +109,7 @@ fn window(mut feed: Feed) -> Result<()> {
         let form = Form(CreateWindowExW(
             WS_EX_APPWINDOW,
             class,
-            &HSTRING::from(format!("Kelvaroq · {}", t("monitor"))),
+            &HSTRING::from(format!("Velkin · {}", t("monitor"))),
             style,
             CW_USEDEFAULT,
             CW_USEDEFAULT,

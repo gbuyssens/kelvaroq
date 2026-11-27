@@ -19,7 +19,7 @@ index 244a76c..67c1839 100644
 +/// can leave some mip levels untouched.
 +#[cfg(windows)]
 +mod texture_heaps {
-+    use kelvaroq_render::heap_ranges::HeapRanges;
++    use velkin_render::heap_ranges::HeapRanges;
 +    use std::collections::HashSet;
 +    use std::sync::{Mutex, OnceLock};
 +    use windows::Win32::Graphics::Direct3D12::*;

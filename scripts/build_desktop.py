@@ -18,14 +18,14 @@ def build(out, version):
     (out / "launcher.rc").write_text(resource, encoding="ascii")
     subprocess.run([rc, "/nologo", "/fo", out / "launcher.res", out / "launcher.rc"], check=True)
     # OUT_DIR is <profile>/build/<package>/out for both host and cross builds.
-    dest = out.parents[2] / "kelvaroq-desktop.exe"
+    dest = out.parents[2] / "velkin-desktop.exe"
     assemblies = ["System.Core", "System.Xml.Linq", "System.Web.Extensions", "System.IO.Compression",
                   "System.Windows.Forms", "WPF/PresentationCore", "WPF/PresentationFramework", "WPF/WindowsBase", "System.Xaml"]
     attrs = out / "version.cs"
     attrs.write_text('[assembly:System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8")]\n'
                      '[assembly:System.Reflection.AssemblyVersion("' + version + '.0")]\n'
-                     '[assembly:System.Reflection.AssemblyCompany("Stellarr Studio SAS")]\n'
-                     '[assembly:System.Reflection.AssemblyProduct("Kelvaroq")]\n', encoding="ascii")
+                     '[assembly:System.Reflection.AssemblyCompany("Velkin contributors")]\n'
+                     '[assembly:System.Reflection.AssemblyProduct("Velkin")]\n', encoding="ascii")
     locales = [src / "locales" / (code + ".json") for code in ("en", "fr", "es", "de", "it", "pt-BR")]
     resources = locales + [src / "controls.xaml", src.parents[1] / "assets/launcher/mark.png"]
     subprocess.run([framework / "csc.exe", "/nologo", "/target:winexe", "/platform:x64", "/optimize+",

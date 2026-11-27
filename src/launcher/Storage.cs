@@ -8,14 +8,14 @@ using System.Web.Script.Serialization;
 using System.Xml;
 using System.Xml.Linq;
 
-namespace Kelvaroq {
+namespace Velkin {
 internal sealed class Problem : Exception {
     internal Problem(string key) : base(key) {}
 }
 internal static class Files {
     internal static readonly StringComparer Names = StringComparer.OrdinalIgnoreCase;
     internal static JavaScriptSerializer Json { get { return new JavaScriptSerializer { MaxJsonLength = 8 * 1024 * 1024 }; } }
-    internal static string Unique(string parent) { return Path.Combine(parent, ".kelvaroq-" + Guid.NewGuid().ToString("N")); }
+    internal static string Unique(string parent) { return Path.Combine(parent, ".velkin-" + Guid.NewGuid().ToString("N")); }
     internal static void Publish(string temp, string path) {
         if (File.Exists(path)) File.Replace(temp, path, null);
         else File.Move(temp, path);
@@ -150,7 +150,7 @@ internal sealed class Preferences {
         profileValues = new Dictionary<string,int>();
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var legacy = Path.Combine(local,"victory");
-        var root = Directory.Exists(legacy) || !Product.Enabled("VICTORY_LAUNCHER_STORAGE") ? legacy : Path.Combine(local,"Kelvaroq");
+        var root = Directory.Exists(legacy) || !Product.Enabled("VICTORY_LAUNCHER_STORAGE") ? legacy : Path.Combine(local,"Velkin");
         cache = Environment.GetEnvironmentVariable("VICTORY_CACHE_DIR") ?? Path.Combine(root,"cache");
         data = Environment.GetEnvironmentVariable("VICTORY_DATA_DIR") ?? Path.Combine(root,"data");
     }

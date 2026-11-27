@@ -1,20 +1,20 @@
 [workspace]
-members = ["native/kelvaroq-render"]
-default-members = [".", "native/kelvaroq-render"]
+members = ["native/velkin-render"]
+default-members = [".", "native/velkin-render"]
 resolver = "3"
 
 [package]
-name = "kelvaroq"
+name = "velkin"
 version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 publish = false
 license = "GPL-3.0-or-later"
-default-run = "kelvaroq"
+default-run = "velkin"
 description = "An experimental console compatibility runtime for Windows x64"
 
 [lib]
-name = "kelvaroq_simd"
+name = "velkin_simd"
 path = "src/simd.rs"
 crate-type = ["cdylib"]
 
@@ -29,7 +29,7 @@ sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-numerics = "0.3"
-kelvaroq-render = { path = "native/kelvaroq-render" }
+velkin-render = { path = "native/velkin-render" }
 dunce = "1.0.5"
 windows = { version = "0.62", features = [
     "Win32_Foundation",

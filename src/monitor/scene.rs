@@ -139,7 +139,7 @@ impl Scene {
             self.target.BeginDraw();
             self.target.Clear(Some(&color(palette(BG), 1.)));
         }
-        self.label("Kelvaroq", 28., 17., 104., 2, MINT);
+        self.label("Velkin", 28., 17., 104., 2, MINT);
         self.fill(133., 21., 1., 21., 0x455864);
         self.label(t("monitor"), 149., 17., 445., 2, WHITE);
         self.label(&feed.status, 29., 48., 620., 0, MUTED);

@@ -12,13 +12,13 @@ from unicorn.x86_const import (
     UC_X86_REG_RSP,
 )
 
-from kelvaroq_reference.graphics_memory import (
+from velkin_reference.graphics_memory import (
     ADDRESS_LIMIT,
     FIRST_HIGH_ADDRESS,
     GRANULARITY,
     GraphicsMemory,
 )
-from kelvaroq_reference.memory import GuestFault, read_guest, write_guest
+from velkin_reference.memory import GuestFault, read_guest, write_guest
 
 
 class GraphicsMemoryTests(unittest.TestCase):

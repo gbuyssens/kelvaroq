@@ -6,7 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 
-namespace Kelvaroq {
+namespace Velkin {
 internal sealed class SavedFile {
     public string path { get; set; }
     public long size { get; set; }
@@ -170,7 +170,7 @@ internal static class Archives {
         Guid token;
         if (pending == null || !Files.Names.Equals(Files.Full(dest),pending.destination) ||
             !Guid.TryParseExact(pending.token,"N",out token)) throw new Problem("badSettings");
-        string prefix = Path.Combine(Path.GetDirectoryName(dest),".kelvaroq-" + token.ToString("N"));
+        string prefix = Path.Combine(Path.GetDirectoryName(dest),".velkin-" + token.ToString("N"));
         string previous = prefix + ".previous", stage = prefix + ".incoming";
         Files.NoLinks(dest); Files.NoLinks(previous); Files.NoLinks(stage);
         if (!Directory.Exists(dest) && Directory.Exists(previous)) Directory.Move(previous,dest);
@@ -191,7 +191,7 @@ internal static class Archives {
         Recover(dest,history);
         Directory.CreateDirectory(parent);
         var pending = new Replacement { destination = Files.Full(dest), token = Guid.NewGuid().ToString("N") };
-        string prefix = Path.Combine(parent,".kelvaroq-" + pending.token);
+        string prefix = Path.Combine(parent,".velkin-" + pending.token);
         string stage = prefix + ".incoming", previous = prefix + ".previous";
         Directory.CreateDirectory(stage);
         try {

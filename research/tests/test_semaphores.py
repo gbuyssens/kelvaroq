@@ -12,8 +12,8 @@ from unicorn.x86_const import (
     UC_X86_REG_RSP,
 )
 
-from kelvaroq_reference.kernel import Kernel
-from kelvaroq_reference.memory import GuestFault
+from velkin_reference.kernel import Kernel
+from velkin_reference.memory import GuestFault
 
 
 class SemaphoreTests(unittest.TestCase):

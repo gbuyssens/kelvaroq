@@ -79,7 +79,7 @@ class Packed128(ctypes.Structure):
 
 @cache
 def native_packed128(path):
-    function = getattr(fma.native_library(path), "kelvaroq_packed128", None)
+    function = getattr(fma.native_library(path), "velkin_packed128", None)
     if function is None:
         raise GuestFault("packed arithmetic requires the x64 arithmetic backend")
     function.argtypes = [ctypes.c_uint32, ctypes.POINTER(Packed128)]
@@ -89,7 +89,7 @@ def native_packed128(path):
 
 def packed_float(op, first, second, mxcsr):
     state = Packed128.from_buffer_copy(first + second + mxcsr.to_bytes(4, "little"))
-    status = native_packed128(os.environ.get("KELVAROQ_SIMD_LIB"))(
+    status = native_packed128(os.environ.get("VELKIN_SIMD_LIB"))(
         op, ctypes.byref(state)
     )
     if status == 3:

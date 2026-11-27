@@ -8,7 +8,7 @@ using System.Reflection;
 using System.Threading;
 using System.Windows;
 
-namespace Kelvaroq {
+namespace Velkin {
 internal sealed class Locale {
     internal static readonly string[] Codes = {"en","fr","es","de","it","pt-BR"};
     internal static readonly string[] Names = {"English","Français","Español","Deutsch","Italiano","Português (Brasil)"};
@@ -33,7 +33,7 @@ internal static class Product {
     internal sealed class Patch { public string name { get; set; } }
     internal sealed class Receipt { public string patched_tree { get; set; } public Patch[] patches { get; set; } }
     internal static string EngineIn(string folder) {
-        string engine = Path.Combine(folder,"kelvaroq-engine.exe");
+        string engine = Path.Combine(folder,"velkin-engine.exe");
         return File.Exists(engine) ? engine : Path.Combine(folder,"victory.exe");
     }
     internal static Receipt Build() {
@@ -46,9 +46,9 @@ internal static class Product {
     }
     internal static bool PreloadAllowed { get { return Enabled("VICTORY_PIPELINE_PRECOMPILE") && Enabled("VICTORY_PIPELINE_WARMUP"); } }
     internal static ProcessStartInfo Command(Installation game, Preferences p, Locale locale, bool experimental, bool dark, Hardware hardware) {
-        string cli = Path.Combine(Base,"kelvaroq-cli.exe");
-        if (!File.Exists(cli) && Files.Names.Equals(Path.GetFileName(Environment.GetEnvironmentVariable("VICTORY_LAUNCHER_EXE")),"kelvaroq-launcher.exe"))
-            cli = Path.Combine(Base,"kelvaroq.exe");
+        string cli = Path.Combine(Base,"velkin-cli.exe");
+        if (!File.Exists(cli) && Files.Names.Equals(Path.GetFileName(Environment.GetEnvironmentVariable("VICTORY_LAUNCHER_EXE")),"velkin-launcher.exe"))
+            cli = Path.Combine(Base,"velkin.exe");
         if (!File.Exists(cli) || !File.Exists(EngineIn(Path.Combine(Base,"native")))) throw new Problem("engineMissing");
         var start = new ProcessStartInfo(cli,"play " + (experimental ? "--experimental-render " : "") + "-- \"" + game.Image + "\"") {
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, WorkingDirectory = Base };
@@ -57,7 +57,7 @@ internal static class Product {
     }
     internal static void Configure(ProcessStartInfo start,Installation game,Preferences p,Locale locale,bool dark,Hardware hardware = null) {
         ProfileRule.Apply(start,hardware,p);
-        start.EnvironmentVariables["KELVAROQ_DESKTOP_LOG"] = "1";
+        start.EnvironmentVariables["VELKIN_DESKTOP_LOG"] = "1";
         start.EnvironmentVariables["VICTORY_LAUNCHER_UI"] = "1";
         start.EnvironmentVariables["VICTORY_GAME_DIR"] = game.Root;
         start.EnvironmentVariables["VICTORY_CACHE_DIR"] = p.ActiveCache;
@@ -89,7 +89,7 @@ internal static class App {
         bool demo = args.Length > 0 && args[0] == "--ui-demo";
         bool test = args.Length == 2 && args[0] == "--self-test";
         string home = demo || test ? Files.Unique(Path.GetTempPath()) :
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Kelvaroq");
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Velkin");
         try {
             Directory.CreateDirectory(home);
             if (test) { Checks.Run(args[1],home); return 0; }
@@ -110,7 +110,7 @@ internal static class App {
             }
         } catch (Exception ex) {
             if (test || (demo && args.Length > 1)) Console.Error.WriteLine(ex);
-            else MessageBox.Show(locale.Error(ex),"Kelvaroq",MessageBoxButton.OK,MessageBoxImage.Error);
+            else MessageBox.Show(locale.Error(ex),"Velkin",MessageBoxButton.OK,MessageBoxImage.Error);
             return 1;
         } finally { if (demo || test) Files.RemoveTree(home); }
     }

@@ -3,7 +3,7 @@
 
 use crate::preload::visual::t;
 use anyhow::{Context, Result, ensure};
-use kelvaroq_render::stats_ring::{ABSENT, CAPACITY, Reader, Writer};
+use velkin_render::stats_ring::{ABSENT, CAPACITY, Reader, Writer};
 use std::{
     collections::{HashMap, VecDeque},
     fs::File,
@@ -256,7 +256,7 @@ impl Feed {
     pub fn record(&self) -> Result<String> {
         use std::time::{SystemTime, UNIX_EPOCH};
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
-        let name = format!("kelvaroq-{}-{stamp}.csv", self.pid.unwrap_or(0));
+        let name = format!("velkin-{}-{stamp}.csv", self.pid.unwrap_or(0));
         self.view().csv(Path::new(&name)).context(t("csvError"))?;
         Ok(name)
     }

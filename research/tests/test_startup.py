@@ -13,11 +13,11 @@ from pathlib import Path
 from unicorn import UC_ARCH_X86, UC_MODE_64, UC_PROT_READ, UC_PROT_WRITE, Uc
 from unicorn.x86_const import UC_X86_REG_R8, UC_X86_REG_RCX, UC_X86_REG_RDX
 
-from kelvaroq_reference.crt import compare_strings, copy_memory, fill_memory
-from kelvaroq_reference.memory import GuestFault
+from velkin_reference.crt import compare_strings, copy_memory, fill_memory
+from velkin_reference.memory import GuestFault
 
 ROOT = Path(__file__).resolve().parents[2]
-CLI = Path(os.environ.get("KELVAROQ_BIN", ROOT / "target" / "release" / "kelvaroq.exe"))
+CLI = Path(os.environ.get("VELKIN_BIN", ROOT / "target" / "release" / "velkin.exe"))
 BASE = 0x140000000
 
 

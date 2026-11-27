@@ -7,8 +7,8 @@ index 290385d..18a1f83 100644
          }
          let Some(caption) = &self.caption else { return };
 -        let text = format!(" | VIctory {fps:.0} fps {ms:.1} ms/frame {draws:.0} draws/frame");
-+        // Kelvaroq's engine (built on VIctory and its fork, GPL-3.0-or-later).
-+        let text = format!(" | Kelvaroq {fps:.0} fps {ms:.1} ms/image {draws:.0} dessins/image");
++        // Velkin's engine (built on VIctory and its fork, GPL-3.0-or-later).
++        let text = format!(" | Velkin {fps:.0} fps {ms:.1} ms/image {draws:.0} dessins/image");
          let mut text: Vec<u16> = caption.iter().copied().chain(text.encode_utf16()).collect();
          text.push(0);
          // Setting the text waits for the window's thread (a title thread,
@@ -17,7 +17,7 @@ index 290385d..18a1f83 100644
  
  fn make_window(width: u32, height: u32) -> windows::core::Result<HWND> {
 -    const CLASS: PCWSTR = w!("VIctory");
-+    const CLASS: PCWSTR = w!("Kelvaroq");
++    const CLASS: PCWSTR = w!("Velkin");
      // SAFETY: registers our class once and creates a window of it.
      unsafe {
          let instance = GetModuleHandleW(None)?;
@@ -26,7 +26,7 @@ index 290385d..18a1f83 100644
              WINDOW_EX_STYLE(0),
              CLASS,
 -            w!("VIctory"),
-+            w!("Kelvaroq"),
++            w!("Velkin"),
              WS_OVERLAPPEDWINDOW | WS_VISIBLE,
              CW_USEDEFAULT,
              CW_USEDEFAULT,

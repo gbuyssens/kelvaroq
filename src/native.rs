@@ -26,7 +26,7 @@ const EXPERIMENTAL_RENDER: &[(&str, &str)] = &[
 
 /// Approach after XCL b49be18: resolve the host executable relative to the launcher.
 pub(crate) fn find_engine(folder: &Path) -> Option<std::path::PathBuf> {
-    ["kelvaroq-engine.exe", "victory.exe"]
+    ["velkin-engine.exe", "victory.exe"]
         .iter()
         .map(|name| folder.join(name))
         .find(|path| path.is_file())
@@ -64,7 +64,7 @@ pub(crate) fn run(
             );
         Ok(game)
     };
-    if std::env::var_os("KELVAROQ_DESKTOP_LOG").is_some()
+    if std::env::var_os("VELKIN_DESKTOP_LOG").is_some()
         && let Err(error) = crate::preload_process::before_play(&configure)
     {
         eprintln!("Préchargement interrompu. {error:#}");
@@ -73,16 +73,16 @@ pub(crate) fn run(
     game.arg("run")
         .arg(&image)
         .args(["--console", console, "--execute"]);
-    if std::env::var_os("KELVAROQ_DESKTOP_LOG").is_some() {
+    if std::env::var_os("VELKIN_DESKTOP_LOG").is_some() {
         // The desktop launcher starts this CLI without a console and captures its
         // stderr for the error dialog. Give the child its own visible log output.
         unsafe {
             AllocConsole().context("ouverture du journal Windows")?;
             if desktop_v2 {
-                let caption = format!("Kelvaroq | {}", crate::preload::visual::t("journal"));
+                let caption = format!("Velkin | {}", crate::preload::visual::t("journal"));
                 SetConsoleTitleW(&windows::core::HSTRING::from(caption))?;
             } else {
-                SetConsoleTitleW(w!("Kelvaroq | Journal du jeu"))?;
+                SetConsoleTitleW(w!("Velkin | Journal du jeu"))?;
             }
         }
         let log = File::options().write(true).open("CONOUT$")?;
@@ -122,10 +122,10 @@ mod tests {
 
     #[test]
     fn finds_the_packaged_engine_and_older_installations() -> Result<()> {
-        let folder = std::env::temp_dir().join(format!("kelvaroq-engine-test-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("velkin-engine-test-{}", std::process::id()));
         std::fs::create_dir(&folder)?;
         let legacy = folder.join("victory.exe");
-        let current = folder.join("kelvaroq-engine.exe");
+        let current = folder.join("velkin-engine.exe");
         assert_eq!(find_engine(&folder), None);
         std::fs::write(&legacy, [])?;
         assert_eq!(find_engine(&folder), Some(legacy.clone()));

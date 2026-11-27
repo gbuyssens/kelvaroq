@@ -1,5 +1,5 @@
 [package]
-name = "kelvaroq-render"
+name = "velkin-render"
 description = "Frame timing and texture residency for the native rendering backend"
 version = "0.2.0"
 edition = "2024"

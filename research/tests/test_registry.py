@@ -12,8 +12,8 @@ from unicorn.x86_const import (
     UC_X86_REG_RSP,
 )
 
-from kelvaroq_reference.memory import DWORD, QWORD
-from kelvaroq_reference.registry import MACHINE, OEM, Registry
+from velkin_reference.memory import DWORD, QWORD
+from velkin_reference.registry import MACHINE, OEM, Registry
 
 
 class RegistryTests(unittest.TestCase):

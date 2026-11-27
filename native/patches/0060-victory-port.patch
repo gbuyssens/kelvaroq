@@ -718,7 +718,7 @@ index 9d7911c..ae04fbe 100644
 +        adjust_late_tick(kind, tick, delay, limit, late_waits)
 +    };
      #[cfg(windows)]
-     let timing = kelvaroq_render::pacing::start();
+     let timing = velkin_render::pacing::start();
      let hr = if wait > limit {
 @@ -149,7 +167,9 @@ pub(crate) extern "system" fn wait(
          TIMEOUT
@@ -2240,7 +2240,7 @@ index 0000000..c4d2573
 +
 +XCL 7b029e2, `crates/xcl/src/hle/kernelx.rs`, fits guest processor requests to the process affinity allowed by Windows. The port uses the fork's CPU-set idea for engine-owned workers and independently filters eligible processors. The affinity restriction is credited in `fast_cores.rs`.
 +
-+For the CPU-set A/B, check `fast core selection` with the worker name, `fast_sets` and `applied`. Compare `KELVAROQ_PRESENT interval_us` within matched guest-draw bands using deltas of `KELVAROQ_QUEUE_TOTAL draws`. Compare the submit thread's "work and other time" and "awaiting relay" lines alongside the relay's work time. The fork observed the submit worker on slower cores in 6% of samples. The frame-time effect on this machine still needs measurement.
++For the CPU-set A/B, check `fast core selection` with the worker name, `fast_sets` and `applied`. Compare `VELKIN_PRESENT interval_us` within matched guest-draw bands using deltas of `VELKIN_QUEUE_TOTAL draws`. Compare the submit thread's "work and other time" and "awaiting relay" lines alongside the relay's work time. The fork observed the submit worker on slower cores in 6% of samples. The frame-time effect on this machine still needs measurement.
 +
 +For the descriptor change, compare "dynamic slots" tables asked, refused and search time, and guest draws against drawn commands. The supplied run has no exhaustion warning. Its last recording summary asked for 11,546 tables per frame, with zero refusals and 0.8 ms searching. The earlier local run that exhausted the heap is the relevant correctness case. The alias guard logs `identical texture copies skipped` at powers of two with a cumulative `skipped` count. Compare matched images for the rectangle, format and alias changes. Loading-only switches need cold-load time and cache results from matching inputs.
 +

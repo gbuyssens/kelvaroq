@@ -162,17 +162,17 @@ index 69b1373..bcd0d58 100644
              #[cfg(feature = "diagnostics")]
 @@ -8760,8 +8775,14 @@ impl Host {
              }
-             let timing = kelvaroq_render::pacing::start_present();
+             let timing = velkin_render::pacing::start_present();
              let status = p.swap_chain.Present(0, DXGI_PRESENT(0));
 -            if let Some(start) = timing {
--                kelvaroq_render::pacing::present(frame, start, std::time::Instant::now(), status.0);
+-                velkin_render::pacing::present(frame, start, std::time::Instant::now(), status.0);
 +            if timing.is_some() || p.meter.monitor.is_some() {
 +                let end = std::time::Instant::now();
 +                if let Some(monitor) = &mut p.meter.monitor {
 +                    monitor.present(self, frame, status.0, end);
 +                }
 +                if let Some(start) = timing {
-+                    kelvaroq_render::pacing::present(frame, start, end, status.0);
++                    velkin_render::pacing::present(frame, start, end, status.0);
 +                }
              }
              p.meter.frame(p.hwnd);
@@ -283,7 +283,7 @@ index 0000000..dd6656a
 +//! title has already recorded for a later frame.
 +
 +use crate::{draw, frame_wait, host::Host, pipeline, shadow};
-+use kelvaroq_render::stats_ring::{ABSENT, FIELDS, Writer};
++use velkin_render::stats_ring::{ABSENT, FIELDS, Writer};
 +use std::cell::Cell;
 +use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 +use std::sync::{LazyLock, Once};
@@ -662,7 +662,7 @@ index 0000000..dd6656a
 +            return;
 +        };
 +        let mut monitor = Recorder::open().expect("open synthetic publisher");
-+        let reader = kelvaroq_render::stats_ring::Reader::open(std::process::id()).unwrap();
++        let reader = velkin_render::stats_ring::Reader::open(std::process::id()).unwrap();
 +        let mut times = Vec::new();
 +        frame_wait::start_worker(false);
 +        for i in 1..=4096 {

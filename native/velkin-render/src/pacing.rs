@@ -1,5 +1,5 @@
 //! CPU intervals between successful returns from DXGI Present, in groups of 30.
-//! Enabled by KELVAROQ_FRAME_TIMINGS=1 in ordinary and diagnostic builds.
+//! Enabled by VELKIN_FRAME_TIMINGS=1 in ordinary and diagnostic builds.
 //! Wait totals count completed calls across threads. For a 30-interval window,
 //! the nearest-rank p95 is the second-longest interval and p99 is the longest.
 
@@ -11,13 +11,13 @@ const SAMPLES: usize = 30;
 
 fn timings_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| std::env::var_os("KELVAROQ_FRAME_TIMINGS").is_some_and(|v| v == "1"))
+    *ENABLED.get_or_init(|| std::env::var_os("VELKIN_FRAME_TIMINGS").is_some_and(|v| v == "1"))
 }
 
 /// Detailed workload records are independent of the 30-interval summary.
 pub fn workload_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| std::env::var_os("KELVAROQ_WORKLOAD").is_some_and(|v| v == "1"))
+    *ENABLED.get_or_init(|| std::env::var_os("VELKIN_WORKLOAD").is_some_and(|v| v == "1"))
 }
 
 /// Start a guest wait timed by the 30-interval collector.
@@ -33,14 +33,14 @@ pub fn start_present() -> Option<Instant> {
 pub fn workload_queue(frame: u64, draws: u64, drawn: u64, dispatches: u64, dispatched: u64) {
     let _ = writeln!(
         std::io::stderr().lock(),
-        "KELVAROQ_QUEUE_TOTAL frame={frame} draws={draws} drawn={drawn} dispatches={dispatches} dispatched={dispatched}"
+        "VELKIN_QUEUE_TOTAL frame={frame} draws={draws} drawn={drawn} dispatches={dispatches} dispatched={dispatched}"
     );
 }
 
 pub fn workload_bind(frame: u64, guest_token: u64, mesh: &str, pixel: &str) {
     let _ = writeln!(
         std::io::stderr().lock(),
-        "KELVAROQ_MESH_BIND frame={frame} guest_token={guest_token} mesh={mesh} pixel={pixel}"
+        "VELKIN_MESH_BIND frame={frame} guest_token={guest_token} mesh={mesh} pixel={pixel}"
     );
 }
 
@@ -152,11 +152,11 @@ pub fn present(frame: u64, start: Instant, end: Instant, status: i32) {
             if let Some(delta) = interval {
                 let _ = writeln!(
                     sink,
-                    "KELVAROQ_PRESENT frame={frame} interval_us={}",
+                    "VELKIN_PRESENT frame={frame} interval_us={}",
                     delta.as_micros()
                 );
             } else {
-                let _ = writeln!(sink, "KELVAROQ_PRESENT frame={frame}");
+                let _ = writeln!(sink, "VELKIN_PRESENT frame={frame}");
             }
         }
     }
@@ -168,7 +168,7 @@ pub fn present(frame: u64, start: Instant, end: Instant, status: i32) {
         // This optional diagnostic must not fail a presentation on a closed pipe.
         let _ = writeln!(
             std::io::stderr().lock(),
-            "KELVAROQ_FRAME_TIMINGS frames={}..{} samples={} cpu_present_p50_us={} cpu_present_p95_us={} cpu_present_p99_us={} dxgi_call_sum_us={} waits={} wait_requested_sum_us={} wait_elapsed_sum_us={}",
+            "VELKIN_FRAME_TIMINGS frames={}..{} samples={} cpu_present_p50_us={} cpu_present_p95_us={} cpu_present_p99_us={} dxgi_call_sum_us={} waits={} wait_requested_sum_us={} wait_elapsed_sum_us={}",
             r.first,
             r.last,
             SAMPLES,

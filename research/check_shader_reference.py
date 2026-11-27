@@ -176,7 +176,7 @@ def run(executable, cli, reference, pipelines, draw=False):
     sources, packet = shader_inputs(data, plan["sections"])
     require(len(sources) == 10, "unexpected number of embedded containers")
     del data
-    with tempfile.TemporaryDirectory(prefix="kelvaroq-shader-reference-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="velkin-shader-reference-") as tmp:
         probe = Path(tmp) / "reference-probe.exe"
         reference_build(reference, probe)
         # Run the build's defaults regardless of a developer's diagnostic
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     parser.add_argument("executable", type=Path)
     parser.add_argument("--reference", required=True, type=Path)
     parser.add_argument(
-        "--cli", type=Path, default=ROOT / "target/release/kelvaroq.exe"
+        "--cli", type=Path, default=ROOT / "target/release/velkin.exe"
     )
     parser.add_argument(
         "--pipelines",

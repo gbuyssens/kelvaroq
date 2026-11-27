@@ -14,15 +14,15 @@ from unicorn.x86_const import (
     UC_X86_REG_XMM1,
 )
 
-from kelvaroq_reference.crt import Crt
-from kelvaroq_reference.memory import DWORD, GuestFault
+from velkin_reference.crt import Crt
+from velkin_reference.memory import DWORD, GuestFault
 
 
 @unittest.skipUnless(os.name == "nt", "requires the Windows UCRT")
 class CrtMathTests(unittest.TestCase):
     def setUp(self):
-        dll = Path(__file__).resolve().parents[2] / "target/release/kelvaroq_simd.dll"
-        backend = patch.dict(os.environ, KELVAROQ_SIMD_LIB=str(dll))
+        dll = Path(__file__).resolve().parents[2] / "target/release/velkin_simd.dll"
+        backend = patch.dict(os.environ, VELKIN_SIMD_LIB=str(dll))
         backend.start()
         self.addCleanup(backend.stop)
         self.cpu = Uc(UC_ARCH_X86, UC_MODE_64)

@@ -67,9 +67,9 @@ pub struct MathF32 {
 /// `state` must be aligned, initialized and writable for the whole call.
 #[cfg(all(windows, target_arch = "x86_64"))]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kelvaroq_tanf(state: *mut MathF32) -> u32 {
+pub unsafe extern "C" fn velkin_tanf(state: *mut MathF32) -> u32 {
     // SAFETY: retain the original entry point and its pointer contract.
-    unsafe { kelvaroq_math_f32(0, 0, state) }
+    unsafe { velkin_math_f32(0, 0, state) }
 }
 
 /// Evaluate a Windows CRT float operation and isolate the guest errno and MXCSR.
@@ -78,7 +78,7 @@ pub unsafe extern "C" fn kelvaroq_tanf(state: *mut MathF32) -> u32 {
 /// `state` must be aligned, initialized and writable for the whole call.
 #[cfg(all(windows, target_arch = "x86_64"))]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kelvaroq_math_f32(op: u32, second: u32, state: *mut MathF32) -> u32 {
+pub unsafe extern "C" fn velkin_math_f32(op: u32, second: u32, state: *mut MathF32) -> u32 {
     enum Operation {
         Unary(unsafe extern "C" fn(f32) -> f32),
         Binary(unsafe extern "C" fn(f32, f32) -> f32),
@@ -147,7 +147,7 @@ pub unsafe extern "C" fn kelvaroq_math_f32(op: u32, second: u32, state: *mut Mat
 /// `block` must point to a writable, aligned FmaBlock for the entire call.
 #[cfg(target_arch = "x86_64")]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kelvaroq_fma_ps(op: u32, block: *mut FmaBlock) -> u32 {
+pub unsafe extern "C" fn velkin_fma_ps(op: u32, block: *mut FmaBlock) -> u32 {
     // SAFETY: the only caller supplies a private, initialized FmaBlock.
     let Some(block) = (unsafe { block.as_mut() }) else {
         return 1;
@@ -226,7 +226,7 @@ mod tests {
         ];
         for (op, value) in expected.iter().enumerate() {
             let mut state = block(2., 3., 7., 0x1f80);
-            assert_eq!(unsafe { kelvaroq_fma_ps(op as u32, &mut state) }, 0);
+            assert_eq!(unsafe { velkin_fma_ps(op as u32, &mut state) }, 0);
             assert_eq!(state.dst, [value.to_bits(); 4]);
         }
     }
@@ -243,16 +243,16 @@ mod tests {
             1.,
             0x1f80,
         );
-        assert_eq!(unsafe { kelvaroq_fma_ps(4, &mut state) }, 0);
+        assert_eq!(unsafe { velkin_fma_ps(4, &mut state) }, 0);
         assert_eq!(state.dst, [0xa880_0000; 4]);
         let mut state = block(f32::from_bits(0x3380_0000), 1., 1., 0x5f80);
-        assert_eq!(unsafe { kelvaroq_fma_ps(1, &mut state) }, 0);
+        assert_eq!(unsafe { velkin_fma_ps(1, &mut state) }, 0);
         assert_eq!(state.dst, [0x3f80_0001; 4]);
         assert_eq!(state.mxcsr, 0x5fa0);
         assert_eq!(control_word(), before);
         state.mxcsr = 0;
         let data = state.dst;
-        assert_eq!(unsafe { kelvaroq_fma_ps(1, &mut state) }, 3);
+        assert_eq!(unsafe { velkin_fma_ps(1, &mut state) }, 3);
         assert_eq!(state.dst, data);
         assert_eq!(control_word(), before);
     }
@@ -266,7 +266,7 @@ mod tests {
             mxcsr: 0x1f80,
             error: 0,
         };
-        assert_eq!(unsafe { kelvaroq_tanf(&mut state) }, 0);
+        assert_eq!(unsafe { velkin_tanf(&mut state) }, 0);
         assert_eq!(state.value, (-0.0f32).to_bits());
         assert_eq!(state.error, 0);
         assert_eq!(control_word(), before);
@@ -286,7 +286,7 @@ mod tests {
             let errno = _errno();
             let saved = *errno;
             *errno = 71;
-            let status = kelvaroq_math_f32(3, 0, &mut state);
+            let status = velkin_math_f32(3, 0, &mut state);
             let errno_after = *errno;
             *errno = saved;
             (status, errno_after)
