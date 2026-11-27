@@ -363,7 +363,7 @@ impl Scene {
             .iter()
             .filter_map(|(k, t)| h.latest(k).filter(|v| *v > 0).map(|v| (v, *t)))
             .collect();
-        drops.sort_by(|a, b| b.0.cmp(&a.0));
+        drops.sort_by_key(|a| std::cmp::Reverse(a.0));
         let reasons = drops
             .iter()
             .take(2)

@@ -75,11 +75,11 @@ impl History {
             if t + 1_000_000 <= end {
                 break;
             }
-            if t <= end {
-                if let Some(v) = self.get(r, key) {
-                    sum += v as f64;
-                    n += 1;
-                }
+            if t <= end
+                && let Some(v) = self.get(r, key)
+            {
+                sum += v as f64;
+                n += 1;
             }
         }
         (n > 0).then(|| sum / n as f64)
