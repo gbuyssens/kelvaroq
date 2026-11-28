@@ -446,14 +446,14 @@ internal sealed class Shell : Window {
     }
     void About() {
         var info = Card("installation");
-        Row(info,T("productVersion"),Product.Version); Row(info,T("engineBuild"),BuildText(demo ? "9a9091d180f0" : BuildId));
-        Row(info,T("patch"),demo ? "0065" : build.patches == null || build.patches.Length == 0 ? T("unknown") : build.patches.Last().name.Split('-')[0]);
+        Row(info,T("productVersion"),Product.Version); Row(info,T("engineBuild"),BuildText(demo ? "63b902fe1720" : BuildId));
+        Row(info,T("patch"),demo ? "0002" : build.patches == null || build.patches.Length == 0 ? T("unknown") : build.patches.Last().name.Split('-')[0]);
         Row(info,T("licence"),"GPL-3.0-or-later");
         var credits = Card("credits");
         Row(credits,T("publisher"),"Velkin contributors");
         Row(credits,"Kelvaroq","Stellarr Studio SAS, GPL-3.0-or-later");
         Row(credits,"VIctory","GPL-3.0-or-later");
-        Row(credits,"victory-fork","GPL-3.0-or-later");
+        Row(credits,"VIctory-NVIDIA","GPL-3.0-or-later"); Row(credits,"victory-fork","GPL-3.0-or-later");
         if (Product.Enabled("VICTORY_LAUNCHER_UPDATES")) UpdateControls(false);
     }
     void UpdateControls(bool settings) {
@@ -504,7 +504,7 @@ internal sealed class Shell : Window {
     }
     List<Snapshot> Samples() {
         return Enumerable.Range(0,3).Select(n => new Snapshot { Info = new Manifest { created_at = new DateTime(2026,11,24,16-n,30,0,DateTimeKind.Utc).ToString("o"),
-            reason = n == 1 ? "beforeLaunch" : "afterExit", launcher_version = Product.Version, engine_build = "9a9091d180f0",
+            reason = n == 1 ? "beforeLaunch" : "afterExit", launcher_version = Product.Version, engine_build = "63b902fe1720",
             files = new List<SavedFile> { new SavedFile { size = 87040 - n * 1024 } } } }).ToList();
     }
     internal void Capture(string directory) {

@@ -9,20 +9,34 @@ use windows::{
     core::w,
 };
 
-// A process-local test profile. An explicit per-feature setting always wins.
-const EXPERIMENTAL_RENDER: &[(&str, &str)] = &[
-    ("VICTORY_GPU_UPLOAD_READONLY_MB", "256"),
-    ("VICTORY_CARD_READONLY_MB", "128"),
-    ("VICTORY_RECYCLE_COMPARE_SLOTS", "1"),
-    ("VICTORY_GPU_CONSTANT_FILLS", "1"),
-    ("VICTORY_TEXTURE_NO_WAIT", "1"),
-    ("VICTORY_TEXTURE_SCOPED_REMAP", "1"),
-    ("VICTORY_DESCRIPTOR_SYNC_BATCH", "1"),
-    ("VICTORY_ROOT_BIND_CACHE", "1"),
-    ("VICTORY_RELAY_COPY_RUNS", "1"),
-    ("VICTORY_PIPELINE_EARLY_WITHOUT_LIBRARY", "1"),
-    ("VICTORY_SCOPED_CARD_BARRIERS", "1"),
+/// What the engine's own `play` keeps from the environment (its `KEPT`):
+/// every other `VICTORY_*` variable is cleared there, so Velkin hands those
+/// over as `--set NAME=VALUE`.
+const ENGINE_KEEPS: &[&str] = &[
+    "VICTORY_HOME",
+    "VICTORY_ADAPTER",
+    "VICTORY_CONFIG",
+    "VICTORY_GAME_DIR",
+    "VICTORY_CACHE_DIR",
+    "VICTORY_DATA_DIR",
+    "VICTORY_STREAMLINE_DIR",
+    "VICTORY_FIDELITYFX_DIR",
+    "VICTORY_LOG",
 ];
+
+/// The `VICTORY_*` switches set in `vars` that the engine's `play` would
+/// otherwise clear, as `--set` arguments, in a stable order.
+fn switches(vars: impl Iterator<Item = (std::ffi::OsString, std::ffi::OsString)>) -> Vec<String> {
+    let mut set: Vec<String> = vars
+        .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
+        .filter(|(key, _)| key.starts_with("VICTORY_") && !ENGINE_KEEPS.contains(&key.as_str()))
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect();
+    set.sort();
+    set.into_iter()
+        .flat_map(|pair| ["--set".to_owned(), pair])
+        .collect()
+}
 
 /// Approach after XCL b49be18: resolve the host executable relative to the launcher.
 pub(crate) fn find_engine(folder: &Path) -> Option<std::path::PathBuf> {
@@ -42,16 +56,16 @@ pub(crate) fn run(
     // the same file. Keep the extended form for paths that require it.
     let image = dunce::canonicalize(image).context("ouverture de l’exécutable du jeu")?;
     let desktop_v2 = std::env::var_os("VICTORY_LAUNCHER_UI").is_some_and(|v| v == "1");
+    if experimental_render {
+        // The profile named switches of the earlier engine line (victory-fork
+        // up to 9a9091d); the engine since 2026-11-28 (VIctory-NVIDIA) has its
+        // own settings, which `play` applies and its F1 menu changes.
+        eprintln!(
+            "--experimental-render ne change plus rien : le moteur applique ses propres réglages (menu F1)."
+        );
+    }
     let configure = || -> Result<Command> {
         let mut game = Command::new(engine);
-        if experimental_render {
-            game.envs(
-                EXPERIMENTAL_RENDER
-                    .iter()
-                    .copied()
-                    .filter(|(key, _)| std::env::var_os(key).is_none()),
-            );
-        }
         game.current_dir(engine.parent().context("dossier du moteur natif")?)
             .env(
                 "VICTORY_GAME_DIR",
@@ -70,9 +84,13 @@ pub(crate) fn run(
         eprintln!("Préchargement interrompu. {error:#}");
     }
     let mut game = configure()?;
-    game.arg("run")
-        .arg(&image)
-        .args(["--console", console, "--execute"]);
+    // `play`, not `run`: the engine's launcher applies the settings it is
+    // measured with (and those its F1 menu saved) before it runs the title.
+    game.arg("play").arg(&image);
+    if console == "series-s" {
+        game.arg("--series-s");
+    }
+    game.args(switches(std::env::vars_os()));
     if std::env::var_os("VELKIN_DESKTOP_LOG").is_some() {
         // The desktop launcher starts this CLI without a console and captures its
         // stderr for the error dialog. Give the child its own visible log output.
@@ -122,6 +140,26 @@ pub(crate) fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hands_over_the_switches_play_would_clear() {
+        let vars = [
+            ("VICTORY_KEYS", "20:Enter"),
+            ("VICTORY_GAME_DIR", r"C:\jeu"),
+            ("PATH", r"C:\Windows"),
+            ("VICTORY_BVH_BUILDER", "0"),
+        ]
+        .map(|(k, v)| (k.into(), v.into()));
+        assert_eq!(
+            switches(vars.into_iter()),
+            [
+                "--set",
+                "VICTORY_BVH_BUILDER=0",
+                "--set",
+                "VICTORY_KEYS=20:Enter"
+            ]
+        );
+    }
 
     #[test]
     fn finds_the_packaged_engine_and_older_installations() -> Result<()> {

@@ -8,7 +8,7 @@
 
 ![Licence : GPL-3.0-or-later](https://img.shields.io/badge/licence-GPL--3.0--or--later-blue) ![Plateforme : Windows x64](https://img.shields.io/badge/plateforme-Windows%20x64-lightgrey) ![Langage : Rust](https://img.shields.io/badge/langage-Rust-orange) ![Cible : NVIDIA](https://img.shields.io/badge/cible-NVIDIA-76b900)
 
-**Velkin fait tourner des jeux Xbox Series X|S sur un PC Windows équipé d'une carte NVIDIA.** C'est un fork de [Kelvaroq](https://github.com/stellarr-studio/kelvaroq), de Stellarr Studio SAS, dont le moteur natif repose sur VIctory et victory-fork. Velkin part de cette base, la plus avancée sur NVIDIA au moment du fork, et y ajoute ce qui marche le mieux chez VIctory, XCL et leurs forks, plus ses propres améliorations.
+**Velkin fait tourner des jeux Xbox Series X|S sur un PC Windows équipé d'une carte NVIDIA.** C'est un fork de [Kelvaroq](https://github.com/stellarr-studio/kelvaroq), de Stellarr Studio SAS, dont le moteur natif reposait sur VIctory et victory-fork. Depuis le 28 novembre 2026, le moteur de Velkin est construit sur VIctory-NVIDIA, qui s'est montré le plus rapide et le plus stable sur une RTX 3060. Velkin part de cette base, la plus avancée sur NVIDIA au moment du fork, et y ajoute ce qui marche le mieux chez VIctory, XCL et leurs forks, plus ses propres améliorations.
 
 > [!IMPORTANT]
 > **Il vous faut votre propre exemplaire du jeu.** Velkin ne contient et ne distribue aucun fichier de jeu, aucun code de jeu, aucune ressource, aucune clé ni aucun lien de téléchargement. Il lance seulement un jeu que vous possédez et que vous avez installé vous-même depuis votre copie légale. Les demandes de fichiers, de clés, de dumps ou de liens sont refusées et supprimées.
@@ -21,18 +21,18 @@
 - **Mesurer avant d'activer.** Un correctif venu d'ailleurs n'est activé par défaut qu'après une comparaison A/B sur un vrai PC, même scène, même sauvegarde, même cache. Un gain annoncé par un autre projet n'est qu'une piste.
 - **Tout est réversible.** Chaque apport reste derrière un interrupteur `VICTORY_*` ou `VELKIN_*`. Si une mise à jour casse votre jeu, on peut revenir en arrière sans recompiler.
 - **NVIDIA d'abord.** Le banc de test principal est une RTX 3060, une carte courante plutôt qu'un haut de gamme. Ce qui passe sur elle passe sur la plupart des RTX.
-- **Un moteur tenu à jour.** Les correctifs de Velkin forment une branche git posée sur victory-fork, recalée régulièrement sur l'amont au lieu d'une pile de patches figée. [Dernier recalage](native/RECALAGE.md)
+- **Un moteur tenu à jour.** Les correctifs de Velkin forment une branche git posée sur VIctory-NVIDIA, recalée régulièrement sur l'amont au lieu d'une pile de patches figée. [Le moteur](native/MOTEUR.md)
 
 ## Où en est le projet
 
-- **Moteur :** recalé le 27 novembre 2026 sur victory-fork `9a9091d`. Une partie des correctifs hérités de Kelvaroq est reprise telle quelle ; les autres (correctifs XCL, wave64, ray tracing, mémoire unifiée, etc.) attendent une mesure avant d'être gardés. [Le détail](native/RECALAGE.md)
+- **Moteur :** construit depuis le 28 novembre 2026 sur VIctory-NVIDIA `63b902f`, avec le garde-fou mémoire de victory-fork. Sur RTX 3060, dans la cinématique d'ouverture : 10,1 fps contre 8,9 pour victory-fork, alors que l'ancien moteur plantait au chargement. [Le détail](native/MOTEUR.md)
 - **Mesures :** une campagne A/B est en cours sur RTX 3060. Ses résultats seront publiés ici, avec leur protocole, dès qu'ils seront complets. Aucun chiffre de performance n'est annoncé avant.
 - **Lanceur :** bureau WPF en six langues, profils matériels automatiques, historique des sauvegardes, moniteur de performances, préchargement des shaders et Discord Rich Presence.
 
 ## Feuille de route
 
 - [x] Fork de Kelvaroq sous le nom Velkin, sous licence GPL-3.0-or-later.
-- [x] Moteur tenu comme une branche git et recalé sur victory-fork `9a9091d`.
+- [x] Moteur tenu comme une branche git, sur VIctory-NVIDIA `63b902f`.
 - [x] Nom Velkin dans toutes les fenêtres et Discord Rich Presence dans le lanceur.
 - [ ] Campagne A/B sur RTX 3060 pour les correctifs en attente (XCL, VIctory et leurs forks).
 - [ ] Activer par défaut les correctifs gagnants, retirer les autres.
@@ -48,7 +48,7 @@
 2. Ouvrez **Velkin.exe** et choisissez le dossier du jeu ou son exécutable. Vous pouvez aussi glisser l'un ou l'autre sur Velkin.exe.
 3. Le lanceur utilise le moteur natif fourni dans le ZIP. Le moteur ouvre une fenêtre de rendu et un journal de session Velkin.
 
-`Velkin.exe --experimental-render` (ou `velkin play --experimental-render <dossier>`) lance un ancien profil expérimental. Les réglages par défaut sont recommandés. Les variables `VICTORY_*` que vous définissez vous-même sont prioritaires. [Réglages de mémoire et de soumission](documentation.md#placement-mémoire-et-soumission)
+Les réglages du moteur se changent dans son menu F1 en jeu. Les variables `VICTORY_*` que vous définissez vous-même sont transmises au moteur et prioritaires. `--experimental-render` n'a plus d'effet. [Réglages de mémoire et de soumission](documentation.md#placement-mémoire-et-soumission)
 
 Quand vous choisissez un dossier, le lanceur lit l'exécutable Series déclaré dans `MicrosoftGame.config`. Si plusieurs exécutables sont déclarés, choisissez directement le bon. Le profil Series X présente sur une surface 3840×2160 et ajuste la fenêtre au bureau. Vous pouvez déplacer le dossier tant que ses fichiers restent ensemble.
 
@@ -105,7 +105,7 @@ python -m venv .venv
 .\.venv\Scripts\python -m pip install -e './research[dev]'
 ```
 
-Le script natif récupère la révision épinglée de victory-fork, applique les correctifs de `native/patches` et ajoute `native/velkin-render`. Avec un clone existant : `python scripts/build_native.py --source <clone>`. Pour travailler sur le moteur lui-même, `scripts/engine.py` gère la branche git des correctifs. [Mode d'emploi](native/RECALAGE.md)
+Le script natif récupère la révision épinglée de VIctory-NVIDIA et applique les correctifs de `native/patches`. Avec un clone existant : `python scripts/build_native.py --source <clone>`. Pour travailler sur le moteur lui-même, `scripts/engine.py` gère la branche git des correctifs. [Mode d'emploi](native/MOTEUR.md)
 
 `python scripts/package_windows.py` refait le ZIP de version dans `target/dist/`, avec les avis tiers, les sommes de contrôle et un test de l'archive extraite. Le moteur de référence utilise Unicorn sous GPLv2 ; le package contient son avis et ses sources. [Licence Unicorn](https://github.com/unicorn-engine/unicorn/blob/2.1.4/COPYING)
 
@@ -130,7 +130,8 @@ $image = 'D:\images\exemple.exe'
 
 - [Architecture, critères de compatibilité et protocole de mesure](documentation.md)
 - [Contribuer : compiler, relire et tester](CONTRIBUTING.md)
-- [Recalage du moteur sur victory-fork](native/RECALAGE.md)
+- [Le moteur et son changement de base](native/MOTEUR.md)
+- [Ancien recalage sur victory-fork (archive)](native/archive-victory-fork/RECALAGE.md)
 
 ## Contribuer
 
@@ -142,7 +143,8 @@ Velkin est un fork de **Kelvaroq**, développé par **Stellarr Studio SAS** ([st
 
 - **Kelvaroq**, de Stellarr Studio SAS et ses contributeurs, fournit le lanceur, le crate de rendu (devenu `native/velkin-render`), les correctifs de `native/patches`, le moteur de référence et les outils de mesure. Licence GPL-3.0-or-later. [Kelvaroq](https://github.com/stellarr-studio/kelvaroq)
 - **VIctory**, de Marvisak et ses contributeurs, fournit le chargeur, les services d'exécution, le rendu Direct3D 12 et le recompilateur de shaders du moteur natif. Licence GPL-3.0-or-later. [VIctory](https://github.com/Marvisak/VIctory)
-- **victory-fork**, de fxceless et ses contributeurs, fournit la révision sur laquelle Velkin pose ses correctifs. Licence GPL-3.0-or-later. [victory-fork](https://github.com/fxceless/victory-fork)
+- **VIctory-NVIDIA**, de trustno1-coder et ses contributeurs, fournit la révision sur laquelle Velkin pose ses correctifs. Licence GPL-3.0-or-later. [VIctory-NVIDIA](https://github.com/trustno1-coder/VIctory-NVIDIA)
+- **victory-fork**, de fxceless et ses contributeurs : base de Kelvaroq, puis source du garde-fou mémoire. Licence GPL-3.0-or-later. [victory-fork](https://github.com/fxceless/victory-fork)
 - **XCL** (Xbox Compatibility Layer) et les forks de VIctory sont la source de plusieurs correctifs en cours d'évaluation ; chacun garde la mention de son origine dans son en-tête.
 - **Unicorn** fait tourner le moteur de référence CPU, sous licence GPLv2. [Unicorn](https://github.com/unicorn-engine/unicorn)
 

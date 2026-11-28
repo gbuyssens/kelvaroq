@@ -1,0 +1,955 @@
+diff --git a/apps/victory/src/play.rs b/apps/victory/src/play.rs
+index 141e932d663c86d33e57d2a652439906eba7fdbc..676fb91084a558c08e8d39661cd60173ebb0192a 100644
+--- a/apps/victory/src/play.rs
++++ b/apps/victory/src/play.rs
+@@ -53,6 +53,9 @@ const FSR_FILES: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_
+ /// The settings the title is started with (`scripts\play-foxhound.ps1` has
+ /// the same, with what each is for).
+ const SETTINGS: &[(&str, &str)] = &[
++    // Texture pieces are placed as before (first block that fits), not fullest block first, as
++    // victory-fork's launcher does with its memory gate (2eade68): the gate is on either way.
++    ("VICTORY_POOL_FULLEST", "0"),
+     // Submission and copy machinery
+     ("VICTORY_THIN", "1"),
+     ("VICTORY_JOIN_PARTS", "8"),
+diff --git a/crates/victory-gpu/src/draw.rs b/crates/victory-gpu/src/draw.rs
+index e3a7be8bf5c1c8ad291908dc90c1385d60e464b3..e78a2b894208aaf62269f12955807c9dfd90d734 100644
+--- a/crates/victory-gpu/src/draw.rs
++++ b/crates/victory-gpu/src/draw.rs
+@@ -836,6 +836,11 @@ pub(crate) static HEAP_TEXTURES_WAITING: AtomicU64 = AtomicU64::new(0);
+ /// Passes that made no texture because the card had no room
+ /// (`crate::resource::room`), for the memory line.
+ pub(crate) static HEAP_TEXTURES_FULL: AtomicU64 = AtomicU64::new(0);
++/// Looks of the pass over textures picked by index at a slot whose host
++/// copy found no place in a block while the card had no room for a new one
++/// (`crate::pool::gate`): the slot stayed due. Since the start, and since
++/// the last line of the log.
++pub(crate) static HEAP_TEXTURES_NO_PLACE: [AtomicU64; 2] = [const { AtomicU64::new(0) }; 2];
+ 
+ /// Frames after a whole upload of a texture picked by index at which its
+ /// memory is looked at again, each counted from the look before.
+@@ -3404,6 +3409,27 @@ impl State {
+                 served = false;
+                 break;
+             }
++            // The card has no room for a new block of textures
++            // (`crate::pool::gate`): the host copy this slot wants is made
++            // first, before anything of the slot changes. If no block there
++            // is has a place for it, it is not made and the slot waits as
++            // one without room does: it shows what it showed, and is looked
++            // at again after 1, 2, 4, ... frames, at most about four
++            // seconds. (A bake cannot wait: its textures get their block.)
++            if room && crate::pool::full() && !baking && sync.is_none() && !required {
++                let wanted = held.as_ref().and_then(crate::descriptor::host::placed_texture).or_else(|| held.clone());
++                if let Some(View::Shader(wanted, _)) = wanted
++                    && crate::resource::title_fills(wanted as This)
++                    && let (None, true) = crate::pool::waiting(|| crate::resource::host_resource(wanted as This))
++                {
++                    for count in &HEAP_TEXTURES_NO_PLACE {
++                        count.fetch_add(1, Ordering::Relaxed);
++                    }
++                    outcome(slot_outcome::HELD);
++                    tells.tell(index, write, Told::Later(frame, most));
++                    continue;
++                }
++            }
+             // A slot that shows the texture by an earlier view of it (one
+             // from another level) goes on doing so until the upload of what
+             // the new one shows has run.
+diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
+index ce940b965dc2dabcdfec207d5f47e750e76ebb7f..23516a2b77ade23679b25060d1b81137f306c35d 100644
+--- a/crates/victory-gpu/src/host.rs
++++ b/crates/victory-gpu/src/host.rs
+@@ -9904,7 +9904,7 @@ impl Meter {
+                     crate::descriptor::host::STALE[4].load(Ordering::Relaxed)
+                 );
+                 // What the queue's room test (`crate::resource::room`) weighs.
+-                if let Some([budget, used, blocks, buffers, targets, line]) =
++                if let Some([budget, used, blocks, buffers, targets, line, by_gate, to_come, block_room]) =
+                     crate::resource::room_terms(host().and_then(|h| h.video_memory()))
+                 {
+                     let weighed = used.saturating_sub(blocks) + buffers + targets;
+@@ -9913,7 +9913,37 @@ impl Meter {
+                          card copies of title buffers + {targets} MB kept for render targets = {weighed} MB against a line of \
+                          {line} MB ({:.1} % of a budget of {budget} MB): {}",
+                         line as f64 * 100.0 / budget.max(1) as f64,
+-                        if weighed < line { "room" } else { "no room, new textures wait" }
++                        if by_gate < line {
++                            "room"
++                        } else if weighed < line {
++                            "no room in the texture blocks and none for a new block, new textures wait"
++                        } else {
++                            "no room, new textures wait"
++                        }
++                    );
++                    // The gate on new blocks (`crate::pool::gate`) and how
++                    // full the blocks are.
++                    let [n, free, q0, h0, q1, h1, q2, h2, q3, h3, given] = crate::pool::fill();
++                    let [made, not_made, past] = crate::pool::BLOCKS.each_ref().map(|b| b.load(Ordering::Relaxed));
++                    let no_place = crate::draw::HEAP_TEXTURES_NO_PLACE[0].load(Ordering::Relaxed);
++                    let no_place_now = crate::draw::HEAP_TEXTURES_NO_PLACE[1].swap(0, Ordering::Relaxed);
++                    tracing::info!(
++                        "texture blocks{}: {n} blocks ({} MB), {} MB of them free; by how full: {q0} under a quarter (they hold {} \
++                         MB), {q1} up to a half ({} MB), {q2} up to three quarters ({} MB), {q3} fuller ({} MB); a new block: {used} \
++                         MB in use + 64 MB + {buffers} MB kept for card copies of title buffers + {to_come} MB of render targets \
++                         still to come = {} MB against the line of {line} MB: {}; since the start {made} blocks made, {not_made} \
++                         blocks not made for want of room, {past} made without room for textures that could not wait, {given} \
++                         given back; textures waiting for a place: {no_place_now} looks since the last line, {no_place} since the \
++                         start",
++                        if crate::pool::gate() { "" } else { " (VICTORY_POOL_GATE=0: a block is made whenever none has room)" },
++                        n * 64,
++                        free >> 20,
++                        h0 >> 20,
++                        h1 >> 20,
++                        h2 >> 20,
++                        h3 >> 20,
++                        used + 64 + buffers + to_come,
++                        if block_room != 0 { "one may be made" } else { "none is made, textures take the free pieces" },
+                     );
+                 }
+                 let [looks, mapped, same, staged, all, made, views] =
+diff --git a/crates/victory-gpu/src/pool.rs b/crates/victory-gpu/src/pool.rs
+index f94df04832d0c5fe2fa5daddd0c38b648d932d68..2e7a352ce267b60b8efdc2528cbd8ae47d93a012 100644
+--- a/crates/victory-gpu/src/pool.rs
++++ b/crates/victory-gpu/src/pool.rs
+@@ -90,6 +90,155 @@ pub(crate) fn on() -> bool {
+     *ON.get_or_init(|| std::env::var_os("VICTORY_TEXTURE_POOL").is_none_or(|v| v != "0"))
+ }
+ 
++/// Whether a new block of textures is made only while the card has room for
++/// it (on by default; `VICTORY_POOL_GATE=0`: whenever no block has room, as
++/// before).
++///
++/// A block is 64 MiB and goes back to the card only when its last texture
++/// does ([`Pool::reclaim`]). The texture queue and the sweep
++/// (`crate::resource::room`, `let_go_idle`) weighed the card's use *less the
++/// free part of the blocks*, so whenever a texture fitted no free piece
++/// (pieces rest for 2.5 s, and a large texture wants one unbroken range) a
++/// new block was made beside them and the card's use went up for good: run
++/// 423 stood 0.8 to 1.0 GB over its budget for seven minutes with 1.5 to
++/// 2.6 GB free inside the blocks, frames of 162 ms where sessions under the
++/// budget had 90. With this a block is made only while the card's whole
++/// use, with that block and with what is still to come of render targets
++/// and buffer copies, stays under the queue's line
++/// (`crate::resource::block_room`). Without that room a texture goes into a
++/// free piece of a block there is, or it waits: the texture pass leaves its
++/// slot due (`draw.rs` `heap_textures`; the slot shows what it showed), and
++/// the queue and the sweep then go by the free part of the blocks
++/// (`crate::resource::weighed`). A texture that cannot wait (a draw reads it
++/// through a table now, or a bake) still gets its block ([`PAST`]). Nothing
++/// is moved, and nothing is given back that was not before.
++pub(crate) fn gate() -> bool {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| std::env::var_os("VICTORY_POOL_GATE").is_none_or(|v| v != "0"))
++}
++
++/// Whether a piece is cut from the fullest block that has room for it (on
++/// by default; `VICTORY_POOL_FULLEST=0`: from the first, as before).
++///
++/// Once no block can be made ([`gate`]) the blocks there are must do. A
++/// block that holds little gets nothing new while a fuller one has room: it
++/// keeps its long free ranges for the large textures, and it empties as its
++/// textures go, and an empty block goes back to the card by the rule there
++/// was ([`Pool::reclaim`]). From the first block with room, every block got
++/// small textures into its holes and stayed.
++fn fullest() -> bool {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| std::env::var_os("VICTORY_POOL_FULLEST").is_none_or(|v| v != "0"))
++}
++
++/// What had no place: `known` if a piece of `len` bytes at `align` would
++/// have none where that had none, else this one.
++fn smaller(known: Option<(u64, u64)>, len: u64, align: u64) -> (u64, u64) {
++    match known {
++        Some((l, a)) if l <= len && a <= align => (l, a),
++        _ => (len, align),
++    }
++}
++
++/// Whether a block may be made for a piece that fits none ([`gate`]).
++#[derive(Clone, Copy, Debug, PartialEq)]
++enum Grow {
++    /// The card has room: as before, and blocks ahead too.
++    Yes,
++    /// It has none, and the texture cannot wait: a block for it, none ahead.
++    Must,
++    /// It has none, and the texture can wait ([`waiting`]): no block.
++    No,
++}
++
++/// Since the start: blocks of textures made; times a block was not made for
++/// want of room on the card (a texture then waited); blocks made without
++/// that room for a texture that could not wait.
++pub(crate) static BLOCKS: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
++const MADE: usize = 0;
++const NOT_MADE: usize = 1;
++const PAST: usize = 2;
++
++/// Whether the card had no room for a new block when last asked
++/// (`crate::resource::block_room`): the free pieces of the blocks are then
++/// all the room there is for textures.
++static FULL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
++
++/// See [`FULL`].
++pub(crate) fn full() -> bool {
++    gate() && FULL.load(Ordering::Relaxed)
++}
++
++/// `crate::resource::block_room`'s answer, for [`full`].
++pub(crate) fn note_full(full: bool) {
++    FULL.store(full, Ordering::Relaxed);
++}
++
++/// Whether the card has room for a new block of textures
++/// (`crate::resource::block_room`), as it was at most a tenth of a second
++/// ago.
++fn may_grow() -> bool {
++    if !gate() {
++        return true;
++    }
++    // The tenth of a second of the last asking, counted from 1, and its
++    // answer in the lowest bit (as `crate::resource::room_lately`).
++    static LAST: AtomicU64 = AtomicU64::new(0);
++    let tenth = now() / 100 + 1;
++    let last = LAST.load(Ordering::Relaxed);
++    if last >> 1 == tenth {
++        return last & 1 != 0;
++    }
++    let room = crate::resource::block_room(crate::host::host().and_then(|h| h.video_memory()));
++    LAST.store((tenth << 1) | u64::from(room), Ordering::Relaxed);
++    room
++}
++
++thread_local! {
++    /// The texture being made on this thread can wait for a place
++    /// ([`waiting`]), and the last one asked for did ([`waits`]).
++    static CAN_WAIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
++    static WAITED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
++}
++
++/// Runs `make`, which may make a host texture that can wait: if no block
++/// has a place for it and the card has no room for a new block ([`gate`]),
++/// it is not made, and the second value returned says so. Only the pass
++/// over textures picked by index asks this way: it leaves the slot due.
++pub(crate) fn waiting<T>(make: impl FnOnce() -> T) -> (T, bool) {
++    let was = CAN_WAIT.replace(true);
++    WAITED.set(false);
++    let made = make();
++    CAN_WAIT.set(was);
++    (made, WAITED.replace(false))
++}
++
++/// Within [`waiting`]: whether the texture this thread just asked a block
++/// for ([`texture`]) was not made for want of a place. (False outside it.)
++pub(crate) fn waits() -> bool {
++    WAITED.get()
++}
++
++/// For the log: the blocks of textures and the bytes of them free now; by
++/// how full each is, the blocks that hold under a quarter of a block, a
++/// quarter to a half, a half to three quarters, and more, each with the
++/// bytes those blocks hold; and the blocks given back to the card since the
++/// start. (A piece given back counts as held until it has rested.)
++pub(crate) fn fill() -> [u64; 11] {
++    let pool = lock(&TEXTURES);
++    let mut f = [0u64; 11];
++    for block in pool.blocks.iter().flatten() {
++        let holds = BLOCK.saturating_sub(block.room);
++        f[0] += 1;
++        f[1] += block.room;
++        let quarter = (holds * 4 / BLOCK).min(3) as usize;
++        f[2 + 2 * quarter] += 1;
++        f[3 + 2 * quarter] += holds;
++    }
++    f[10] = pool.given;
++    f
++}
++
+ /// How many blocks of textures are made ahead, so that one has been there
+ /// for a while when its first piece is taken (`VICTORY_RIPE_BLOCKS`, 12;
+ /// 0: none, and new blocks are used at once, as before).
+@@ -114,15 +263,26 @@ struct Ripe {
+     started: u64,
+     finished: u64,
+     ahead: usize,
++    /// Whether a block may be made ([`gate`]), and whether the fullest
++    /// block with room is taken first ([`fullest`]).
++    grow: Grow,
++    fullest: bool,
+ }
+ 
+ impl Ripe {
+-    const ALL: Ripe = Ripe { started: 0, finished: 0, ahead: 0 };
++    const ALL: Ripe = Ripe { started: 0, finished: 0, ahead: 0, grow: Grow::Yes, fullest: false };
+ 
+     fn now() -> Ripe {
+         let (started, finished) = crate::host::submissions();
+         // Not more than are kept ([`room`]): they would go and be made again.
+-        Ripe { started, finished, ahead: ahead().min(SPARES.load(Ordering::Relaxed)) }
++        Ripe { started, finished, ahead: ahead().min(SPARES.load(Ordering::Relaxed)), grow: Grow::Yes, fullest: fullest() }
++    }
++
++    /// Whether a piece of `len` bytes is cut from a block at all.
++    fn pooled(self, len: u64) -> bool {
++        // With blocks made ahead, what would be an allocation of its own (and
++        // new when the card first reads it) lies in one of those too.
++        len != 0 && len <= if self.ahead > 0 { BLOCK } else { BLOCK / 2 }
+     }
+ 
+     fn is<B>(self, block: &Block<B>) -> bool {
+@@ -186,6 +346,13 @@ pub(crate) struct Piece {
+ struct Block<B> {
+     memory: B,
+     free: Ranges,
++    /// The bytes of `free`.
++    room: u64,
++    /// The smallest piece (bytes, alignment) its free ranges had no place
++    /// for since one last came free in it (as [`Pool::no_fit`]): a block
++    /// nearly full is asked first ([`fullest`]), and was looked through
++    /// for every piece.
++    no_fit: Option<(u64, u64)>,
+     /// The end of the highest piece ever taken: above it the memory is as
+     /// it was made (zeros).
+     used_to: u64,
+@@ -205,11 +372,18 @@ struct Pool<B> {
+     spare: usize,
+     most: usize,
+     retry_growth_at: u64,
++    /// The smallest piece (bytes, alignment) that fitted no block since a
++    /// piece last came free or a block was made: one as long and as aligned
++    /// fits none either and is not looked for again ([`gate`]: a texture
++    /// that waits asks again and again).
++    no_fit: Option<(u64, u64)>,
++    /// Blocks given back since the start.
++    given: u64,
+ }
+ 
+ impl<B: Clone> Pool<B> {
+     const fn new(most: usize) -> Pool<B> {
+-        Pool { blocks: Vec::new(), resting: VecDeque::new(), spare: 0, most, retry_growth_at: 0 }
++        Pool { blocks: Vec::new(), resting: VecDeque::new(), spare: 0, most, retry_growth_at: 0, no_fit: None, given: 0 }
+     }
+ 
+     /// A piece of `len` bytes and the memory it lies in, and whether that
+@@ -228,23 +402,42 @@ impl<B: Clone> Pool<B> {
+         ripe: Ripe,
+         mut make: impl FnMut() -> Option<B>,
+     ) -> Option<(Piece, B, bool)> {
+-        // With blocks made ahead, what would be an allocation of its own (and
+-        // new when the card first reads it) lies in one of those too.
+-        if len == 0 || len > if ripe.ahead > 0 { BLOCK } else { BLOCK / 2 } {
++        if !ripe.pooled(len) {
+             return None;
+         }
+         self.rested(now);
++        // Known to fit no block there is ([`Pool::no_fit`]).
++        let known = self.no_fit.is_some_and(|(l, a)| len >= l && align >= a);
+         let mut found = None;
+-        for (i, block) in self.blocks.iter_mut().enumerate() {
+-            if let Some(block) = block
+-                && ripe.is(block)
+-                && let Some(start) = block.free.take(len, align)
+-            {
+-                found = Some((i, start));
+-                break;
++        if known {
++            // Not looked for.
++        } else if ripe.fullest {
++            // The fullest block with room first ([`fullest`]); of two as
++            // full, the first.
++            let fits = |b: &&Block<B>| ripe.is(b) && b.room >= len && !b.no_fit.is_some_and(|(l, a)| len >= l && align >= a);
++            let mut order: Vec<(u64, usize)> =
++                self.blocks.iter().enumerate().filter_map(|(i, b)| b.as_ref().filter(fits).map(|b| (b.room, i))).collect();
++            order.sort_unstable();
++            for (_, i) in order {
++                let Some(block) = self.blocks[i].as_mut() else { continue };
++                if let Some(start) = block.free.take(len, align) {
++                    found = Some((i, start));
++                    break;
++                }
++                block.no_fit = Some(smaller(block.no_fit, len, align));
++            }
++        } else {
++            for (i, block) in self.blocks.iter_mut().enumerate() {
++                if let Some(block) = block
++                    && ripe.is(block)
++                    && let Some(start) = block.free.take(len, align)
++                {
++                    found = Some((i, start));
++                    break;
++                }
+             }
+         }
+-        if found.is_none() && ripe.ahead > 0 {
++        if found.is_none() && !known && ripe.ahead > 0 {
+             // The one that has been there the longest.
+             let mut unripe: Vec<(u64, usize)> =
+                 self.blocks.iter().enumerate().filter_map(|(i, b)| Some((b.as_ref()?.made, i))).collect();
+@@ -256,11 +449,24 @@ impl<B: Clone> Pool<B> {
+         let (i, start) = match found {
+             Some(found) => found,
+             None => {
++                if !known {
++                    // (Every block was looked at: all are ripe without
++                    // blocks ahead, and with them the oldest were asked.)
++                    self.no_fit = Some(smaller(self.no_fit, len, align));
++                }
++                // No block without room on the card for a texture that can
++                // wait ([`gate`]).
++                if ripe.grow == Grow::No {
++                    return None;
++                }
+                 let memory = self.grow(now, &mut make)?;
+                 let i = self.add(memory, ripe.started);
+                 (i, self.blocks[i].as_mut()?.free.take(len, align)?)
+             }
+         };
++        if let Some(block) = self.blocks[i].as_mut() {
++            block.room -= len;
++        }
+         if ripe.ahead > 0 {
+             if !ripe.is(self.blocks[i].as_ref()?) {
+                 let n = UNRIPE.fetch_add(1, Ordering::Relaxed) + 1;
+@@ -269,7 +475,9 @@ impl<B: Clone> Pool<B> {
+                 }
+             }
+             let empty = self.blocks.iter().flatten().filter(|b| b.free.whole(BLOCK)).count();
++            // (None ahead without room on the card: [`gate`].)
+             if empty < ripe.ahead
++                && ripe.grow == Grow::Yes
+                 && let Some(memory) = self.grow(now, &mut make)
+             {
+                 self.add(memory, ripe.started);
+@@ -300,7 +508,9 @@ impl<B: Clone> Pool<B> {
+                 self.blocks.len() - 1
+             }
+         };
+-        self.blocks[i] = Some(Block { memory, free: Ranges::new(BLOCK), used_to: 0, made, since: crate::host::now_ms() });
++        self.blocks[i] =
++            Some(Block { memory, free: Ranges::new(BLOCK), room: BLOCK, no_fit: None, used_to: 0, made, since: crate::host::now_ms() });
++        self.no_fit = None;
+         i
+     }
+ 
+@@ -322,8 +532,11 @@ impl<B: Clone> Pool<B> {
+             self.resting.pop_front();
+             if let Some(block) = self.blocks[piece.block].as_mut() {
+                 block.free.give(piece.start, piece.len);
++                block.room += piece.len;
++                block.no_fit = None;
+                 any |= block.free.whole(BLOCK);
+             }
++            self.no_fit = None;
+         }
+         // (Without a piece given back too, once there is less room.)
+         let most = limit.min(self.most);
+@@ -335,6 +548,7 @@ impl<B: Clone> Pool<B> {
+                     spare += 1;
+                     if spare > most {
+                         *block = None;
++                        self.given += 1;
+                     }
+                 }
+             }
+@@ -822,8 +1036,15 @@ pub(crate) unsafe fn texture(
+     } else {
+         0
+     };
+-    #[cfg_attr(not(feature = "diagnostics"), allow(unused_variables))]
+-    let (piece, heap, again) = lock(&TEXTURES).take_ripe(info.SizeInBytes, info.Alignment.max(1), now(), Ripe::now(), || {
++    // Whether a block may be made for it if it fits none ([`gate`]).
++    WAITED.set(false);
++    let mut ripe = Ripe::now();
++    ripe.grow = match (may_grow(), CAN_WAIT.get()) {
++        (true, _) => Grow::Yes,
++        (false, false) => Grow::Must,
++        (false, true) => Grow::No,
++    };
++    let taken = lock(&TEXTURES).take_ripe(info.SizeInBytes, info.Alignment.max(1), now(), ripe, || {
+         let desc = D3D12_HEAP_DESC {
+             SizeInBytes: BLOCK,
+             Properties: D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_DEFAULT, ..Default::default() },
+@@ -842,8 +1063,29 @@ pub(crate) unsafe fn texture(
+             tracing::warn!(error = %e, "a block of texture memory is not resident");
+             return None;
+         }
++        if heap.is_some() {
++            BLOCKS[MADE].fetch_add(1, Ordering::Relaxed);
++            if ripe.grow == Grow::Must {
++                let n = BLOCKS[PAST].fetch_add(1, Ordering::Relaxed) + 1;
++                if n.is_power_of_two() {
++                    tracing::info!(
++                        "blocks of textures made without room on the card, for textures that could not wait (read through a \
++                         table now, or baked): {n}"
++                    );
++                }
++            }
++        }
+         heap
+-    })?;
++    });
++    #[cfg_attr(not(feature = "diagnostics"), allow(unused_variables))]
++    let Some((piece, heap, again)) = taken else {
++        // Not made for want of a place (and not for its size): it waits.
++        if ripe.grow == Grow::No && ripe.pooled(info.SizeInBytes) {
++            BLOCKS[NOT_MADE].fetch_add(1, Ordering::Relaxed);
++            WAITED.set(true);
++        }
++        return None;
++    };
+     let mut made: Option<ID3D12Resource> = None;
+     // SAFETY: the piece is no one else's; the heap lives while a piece of
+     // it is taken.
+@@ -1011,7 +1253,7 @@ mod tests {
+             made.set(made.get() + 1);
+             Some(made.get())
+         };
+-        let at = |started, finished| Ripe { started, finished, ahead: 2 };
++        let at = |started, finished| Ripe { started, finished, ahead: 2, ..Ripe::ALL };
+         let take = |pool: &mut Pool<u64>, ripe| pool.take_ripe(BLOCK / 2, 65536, 0, ripe, make).unwrap().1;
+         // Nothing runs: at once, and two are made ahead, one a time.
+         assert_eq!(take(&mut pool, at(0, 0)), 1);
+@@ -1036,6 +1278,127 @@ mod tests {
+         assert!(pool.take(BLOCK, 65536, 0, make).is_none());
+     }
+ 
++    /// Without room on the card no block is made for a texture that can
++    /// wait: it gets a free piece of a block there is, or none; one that
++    /// cannot wait gets its block, and none is made ahead.
++    #[test]
++    fn no_block_is_made_without_room_for_a_texture_that_can_wait() {
++        let mut pool: Pool<u64> = Pool::new(SPARE_KEPT);
++        let made = std::cell::Cell::new(0);
++        let make = || {
++            made.set(made.get() + 1);
++            Some(made.get())
++        };
++        let ripe = |grow| Ripe { ahead: 2, grow, ..Ripe::ALL };
++        let quarter = BLOCK / 4;
++        // With room: a block for it and one ahead each time, as before.
++        let (first, _, _) = pool.take_ripe(quarter, 65536, 0, ripe(Grow::Yes), make).unwrap();
++        assert_eq!((pool.blocks(), made.get()), (2, 2));
++        // Without: the free pieces of the blocks there are, and no block
++        // ahead (the second block is the only empty one).
++        for _ in 0..7 {
++            assert!(pool.take_ripe(quarter, 65536, 0, ripe(Grow::No), make).is_some());
++        }
++        assert_eq!((pool.blocks(), made.get()), (2, 2));
++        // Nothing fits: it waits, and so does every piece as long, without
++        // a look at the blocks ([`Pool::no_fit`]); a smaller one is looked
++        // for.
++        assert!(pool.take_ripe(quarter, 65536, 0, ripe(Grow::No), make).is_none());
++        assert_eq!(pool.no_fit, Some((quarter, 65536)));
++        assert!(pool.take_ripe(2 * quarter, 65536, 0, ripe(Grow::No), make).is_none());
++        assert!(pool.take_ripe(65536, 65536, 0, ripe(Grow::No), make).is_none());
++        assert_eq!(pool.no_fit, Some((65536, 65536)));
++        assert_eq!((pool.blocks(), made.get()), (2, 2));
++        // One that cannot wait gets a block, and none ahead.
++        assert!(pool.take_ripe(quarter, 65536, 0, ripe(Grow::Must), make).is_some());
++        assert_eq!((pool.blocks(), made.get()), (3, 3));
++        assert_eq!(pool.no_fit, None);
++        // A piece that came free is found again.
++        for _ in 0..3 {
++            assert!(pool.take_ripe(quarter, 65536, 0, ripe(Grow::No), make).is_some());
++        }
++        assert!(pool.take_ripe(quarter, 65536, 0, ripe(Grow::No), make).is_none());
++        pool.give(first, 0);
++        assert!(pool.take_ripe(quarter, 65536, REST - 1, ripe(Grow::No), make).is_none());
++        let (again, _, _) = pool.take_ripe(quarter, 65536, REST, ripe(Grow::No), make).unwrap();
++        assert_eq!((again.block, again.start), (first.block, first.start));
++        assert_eq!((pool.blocks(), made.get()), (3, 3));
++        // Too big for a block is not a wait.
++        assert!(!ripe(Grow::No).pooled(BLOCK + 1));
++        assert!(ripe(Grow::No).pooled(BLOCK));
++        assert!(!Ripe::ALL.pooled(BLOCK));
++    }
++
++    /// A piece is cut from the fullest block that has room for it, so the
++    /// block that holds least empties and goes back; the bytes free in each
++    /// block are kept right.
++    #[test]
++    fn the_fullest_block_with_room_is_taken_first() {
++        let mut pool: Pool<u64> = Pool::new(0);
++        let made = std::cell::Cell::new(0);
++        let make = || {
++            made.set(made.get() + 1);
++            Some(made.get())
++        };
++        let ripe = Ripe { fullest: true, ..Ripe::ALL };
++        let piece = BLOCK / 8;
++        // Three full blocks.
++        let taken: Vec<Piece> = (0..24).map(|_| pool.take_ripe(piece, 65536, 0, ripe, make).unwrap().0).collect();
++        assert_eq!(pool.blocks(), 3);
++        // Block 0 keeps one piece, block 1 six, block 2 three.
++        let mut kept = Vec::new();
++        for (i, p) in taken.into_iter().enumerate() {
++            let keep = match p.block {
++                0 => i % 8 == 0,
++                1 => i % 8 < 6,
++                _ => i % 8 < 3,
++            };
++            if keep {
++                kept.push(p);
++            } else {
++                pool.give(p, 0);
++            }
++        }
++        pool.reclaim(REST, 0, true);
++        let rooms = |pool: &Pool<u64>| pool.blocks.iter().map(|b| b.as_ref().map_or(u64::MAX, |b| b.room / piece)).collect::<Vec<_>>();
++        assert_eq!(rooms(&pool), [7, 2, 5]);
++        // The fullest that has room: block 1 twice, then block 2; block 0,
++        // the first, gets nothing while they have room.
++        let blocks: Vec<usize> = (0..7).map(|_| pool.take_ripe(piece, 65536, REST, ripe, make).unwrap().0.block).collect();
++        assert_eq!(blocks, [1, 1, 2, 2, 2, 2, 2]);
++        assert_eq!(rooms(&pool), [7, 0, 0]);
++        // A piece too long for the fuller ones goes where it fits.
++        assert_eq!(pool.take_ripe(4 * piece, 65536, REST, ripe, make).unwrap().0.block, 0);
++        assert_eq!(made.get(), 3);
++        // A block with the bytes but no unbroken range for a piece is
++        // looked through once for it, until a piece comes free in it.
++        let mut holes: Pool<u64> = Pool::new(0);
++        let four: Vec<Piece> = (0..4).map(|_| holes.take_ripe(BLOCK / 4, 65536, 0, ripe, || Some(9)).unwrap().0).collect();
++        holes.give(four[0], 0);
++        holes.give(four[2], 0);
++        holes.reclaim(REST, 2, true);
++        assert!(holes.take_ripe(BLOCK / 2, 65536, REST, Ripe { grow: Grow::No, ..ripe }, || None).is_none());
++        assert_eq!(holes.blocks[0].as_ref().unwrap().no_fit, Some((BLOCK / 2, 65536)));
++        holes.give(four[1], REST);
++        holes.reclaim(2 * REST, 2, true);
++        assert_eq!(holes.blocks[0].as_ref().unwrap().no_fit, None);
++        assert_eq!(holes.take_ripe(BLOCK / 2, 65536, 2 * REST, Ripe { grow: Grow::No, ..ripe }, || None).unwrap().0.start, 0);
++        // From the first with room (off) the next piece goes to block 0.
++        for p in kept.iter().filter(|p| p.block == 1).take(1) {
++            pool.give(*p, REST);
++        }
++        pool.reclaim(2 * REST, 0, true);
++        assert_eq!(rooms(&pool), [3, 1, 0]);
++        assert_eq!(pool.take(piece, 65536, 2 * REST, make).unwrap().0.block, 0);
++        assert_eq!(pool.take_ripe(piece, 65536, 2 * REST, ripe, make).unwrap().0.block, 1);
++        // A block whose last texture went is given back and counted.
++        let mut other: Pool<u64> = Pool::new(0);
++        let only = other.take_ripe(piece, 65536, 0, ripe, make).unwrap().0;
++        other.give(only, 0);
++        other.reclaim(REST, 0, true);
++        assert_eq!((other.blocks(), other.given), (0, 1));
++    }
++
+     /// A pooled texture's piece comes back when its last reference goes, not
+     /// before; its staging piece begins as zeros.
+     #[test]
+diff --git a/crates/victory-gpu/src/resource.rs b/crates/victory-gpu/src/resource.rs
+index 597ede594d5586212af047fdf41b740b01122ce4..a191519d76c72641dba0061f2ed42add4e417eb6 100644
+--- a/crates/victory-gpu/src/resource.rs
++++ b/crates/victory-gpu/src/resource.rs
+@@ -1768,7 +1768,11 @@ fn hosted(this: This, make: bool) -> Option<Made> {
+             None => host_texture(&r.desc.levels_from(base), r.host.state, clear),
+         };
+         let Some(texture) = texture else {
+-            r.host.refused.store(true, Relaxed);
++            // (Not one that only waits for a place in a block,
++            // `crate::pool::waiting`: it is asked for again.)
++            if !crate::pool::waits() {
++                r.host.refused.store(true, Relaxed);
++            }
+             return None;
+         };
+         let twin = twin_texture(&r.desc, &texture);
+@@ -1885,14 +1889,138 @@ pub(crate) fn room(memory: Option<[u64; 4]>) -> bool {
+         // (`crate::shadow::card_room_kept`) and for the render targets a
+         // world makes in its first frame ([`targets_room_kept`]) counts as
+         // used.
+-        Some([budget, used, ..]) => {
+-            used.saturating_sub(crate::pool::texture_room()) + crate::shadow::card_room_kept() + targets_room_kept()
+-                < room_line(budget)
+-        }
++        Some([budget, used, ..]) => weighed(budget, used) < room_line(budget),
+         None => filled < WITHOUT_BUDGET,
+     }
+ }
+ 
++/// What [`room`] and the sweep ([`let_go_idle`]) weigh against the line, in
++/// bytes of a budget of `budget` with `used` in use: the card's use less
++/// the free part of the texture blocks (new textures take that first), with
++/// what is kept for buffer copies and render targets.
++///
++/// And while the card has no room for a new block of textures
++/// ([`block_room`], `crate::pool::gate`) not less than [`blocks_full`]: the
++/// free part of the blocks is then all the room there is, whatever the
++/// card's use says. (The use less the free part can lie far under the line
++/// then: the reserve for render targets was given up, or the blocks were
++/// made under a larger budget. The queue would hand out textures that find
++/// no place, and the sweep would let none go.)
++#[cfg(windows)]
++fn weighed(budget: u64, used: u64) -> u64 {
++    let free = crate::pool::texture_room();
++    let by_use = used.saturating_sub(free) + crate::shadow::card_room_kept() + targets_room_kept();
++    if crate::pool::gate() && !block_room(Some([budget, used, 0, 0])) {
++        by_use.max(blocks_full(room_line(budget), free))
++    } else {
++        by_use
++    }
++}
++
++/// What is weighed against `line` while no block of textures can be made,
++/// with `free` bytes free in the blocks there are: under the line while
++/// more than a block's worth is free (the queue has room), and so that the
++/// sweep, which lets idle textures go from 2 % of the budget under the line
++/// until 5 % under it, keeps 2 to 5 % of the budget and a block's worth
++/// free in the blocks.
++#[cfg(any(windows, test))]
++fn blocks_full(line: u64, free: u64) -> u64 {
++    (line + POOL_BLOCK).saturating_sub(free)
++}
++
++/// A block of textures (`crate::pool`).
++#[cfg(any(windows, test))]
++const POOL_BLOCK: u64 = 64 << 20;
++
++/// Whether the card has room for one more block of textures
++/// (`crate::pool::gate`): its whole use (not less the free part of the
++/// blocks: a block made is the card's memory in use whatever lies in it),
++/// with the block, with what is kept for card copies of title buffers not
++/// made yet and with what is still to come of render targets
++/// ([`targets_to_come`]), stays within the queue's line ([`room_line`]).
++/// Always while the textures the title fills hold less than their floor
++/// ([`texture_floor_bytes`]), as [`room`]; and without the system's numbers.
++///
++/// The line and not the budget: the line is the budget less what is left
++/// for what the host makes with no room test, and the queue and the sweep
++/// steer to it. What is to come is counted because a block never comes back
++/// as a whole: made into room that render targets take minutes later, it
++/// puts the card over (run 423: the targets grew from 1,772 to 2,626 MB in
++/// seven minutes, the blocks were made in the first of them).
++#[cfg(windows)]
++pub(crate) fn block_room(memory: Option<[u64; 4]>) -> bool {
++    use std::sync::atomic::Ordering::Relaxed;
++    let Some([budget, used, ..]) = memory else {
++        return true;
++    };
++    let filled = KINDS[1].load(Relaxed) + crate::tiles::given_total();
++    let room = filled < texture_floor_bytes(Some(budget))
++        || block_fits(used, crate::shadow::card_room_kept() + targets_to_come(), room_line(budget));
++    crate::pool::note_full(!room);
++    room
++}
++
++/// [`block_room`]'s sum: `used` bytes in use and `kept` to come, with one
++/// more block, within `line`.
++#[cfg(any(windows, test))]
++fn block_fits(used: u64, kept: u64, line: u64) -> bool {
++    used + kept + POOL_BLOCK <= line
++}
++
++/// Whether `len` more bytes of title memory by address (an arena of 64
++/// MiB, `crate::memory`) go into the card's own memory: while the card's
++/// use with them, and with what is still to come of render targets
++/// ([`targets_to_come`]), stays under 97 hundredths of `budget`.
++///
++/// The rule was the 97 hundredths alone. With the texture blocks held under
++/// the queue's line (`crate::pool::gate`) the card has room again, and the
++/// arenas would take it up to that mark at once (run 423 made 44 of them,
++/// 2.8 GB, and 14 fitted before the card was full); the render targets then
++/// grow for minutes with no room test (+850 MB in that run) and put the card
++/// over its budget again. An arena is not given back either.
++// Velkin: victory-fork calls it from the arenas of its ray-tracing work
++// (memory.rs, shadow.rs), which are not taken here.
++#[cfg(windows)]
++#[allow(dead_code)]
++pub(crate) fn by_address_room(budget: u64, used: u64, len: u64) -> bool {
++    by_address_fits(budget, used, len, targets_to_come())
++}
++
++#[cfg(any(windows, test))]
++#[allow(dead_code)]
++fn by_address_fits(budget: u64, used: u64, len: u64, to_come: u64) -> bool {
++    used + len + to_come < budget / 100 * 97
++}
++
++/// The bytes of render targets and other host copies the host itself
++/// writes that are still to come: [`targets_most`] less what such copies
++/// hold now. Not given up when they settle, as [`targets_room_kept`] is: it
++/// is weighed for what never comes back (a block of textures, an arena of
++/// title memory by address).
++#[cfg(windows)]
++pub(crate) fn targets_to_come() -> u64 {
++    targets_most().saturating_sub(targets_now())
++}
++
++/// `VICTORY_CARD_ROOM_FOR_TARGETS_MB` in bytes (3,072 MB; 0: none).
++#[cfg(windows)]
++fn targets_most() -> u64 {
++    static MOST: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
++    *MOST.get_or_init(|| {
++        std::env::var("VICTORY_CARD_ROOM_FOR_TARGETS_MB")
++            .ok()
++            .and_then(|v| v.trim().parse::<u64>().ok())
++            .map_or(3072 << 20, |mb| mb.min(8192) << 20)
++    })
++}
++
++/// Every host texture's bytes less those of the copies the title fills.
++#[cfg(windows)]
++fn targets_now() -> u64 {
++    use std::sync::atomic::Ordering::Relaxed;
++    HOST_TEXTURES[1].load(Relaxed).saturating_sub(KINDS[1].load(Relaxed))
++}
++
+ /// The bytes of the card's memory the texture queue leaves free for
+ /// render targets and other host copies the host itself writes that are
+ /// not made yet: `VICTORY_CARD_ROOM_FOR_TARGETS_MB` (3,072; 0: none, as
+@@ -1923,13 +2051,7 @@ pub(crate) fn room(memory: Option<[u64; 4]>) -> bool {
+ #[cfg(windows)]
+ pub(crate) fn targets_room_kept() -> u64 {
+     use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+-    static MOST: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+-    let most = *MOST.get_or_init(|| {
+-        std::env::var("VICTORY_CARD_ROOM_FOR_TARGETS_MB")
+-            .ok()
+-            .and_then(|v| v.trim().parse::<u64>().ok())
+-            .map_or(3072 << 20, |mb| mb.min(8192) << 20)
+-    });
++    let most = targets_most();
+     static SETTLE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+     let settle = *SETTLE.get_or_init(|| {
+         std::env::var("VICTORY_CARD_ROOM_FOR_TARGETS_SETTLE_MS")
+@@ -1937,8 +2059,7 @@ pub(crate) fn targets_room_kept() -> u64 {
+             .and_then(|v| v.trim().parse::<u64>().ok())
+             .unwrap_or(20_000)
+     });
+-    // Every host texture's bytes less those of the copies the title fills.
+-    let targets = HOST_TEXTURES[1].load(Relaxed).saturating_sub(KINDS[1].load(Relaxed));
++    let targets = targets_now();
+     // The targets' bytes at their last change of 64 MiB or more, and when
+     // they last grew by that much.
+     static GREW: [AtomicU64; 2] = [const { AtomicU64::new(0) }; 2];
+@@ -1980,26 +2101,33 @@ fn targets_kept(most: u64, targets: u64, still_ms: u64, settle: u64) -> u64 {
+ 
+ /// What [`room`] weighs now, in MB, for the log: the card's budget, its
+ /// use, the free part of the texture blocks, what is kept for card copies
+-/// of title buffers and for render targets, and the line. `None` without
+-/// the system's numbers, or under `VICTORY_TEXTURE_BUDGET_MB` (which
+-/// weighs the textures' own bytes instead).
++/// of title buffers and for render targets, and the line; then what it
++/// comes to ([`weighed`]: more than those terms' sum while no block of
++/// textures can be made), what is still to come of render targets
++/// ([`targets_to_come`]), and whether the card has room for a new block
++/// ([`block_room`]; 1 or 0). `None` without the system's numbers, or under
++/// `VICTORY_TEXTURE_BUDGET_MB` (which weighs the textures' own bytes
++/// instead).
+ #[cfg(windows)]
+-pub(crate) fn room_terms(memory: Option<[u64; 4]>) -> Option<[u64; 6]> {
++pub(crate) fn room_terms(memory: Option<[u64; 4]>) -> Option<[u64; 9]> {
+     if std::env::var_os("VICTORY_TEXTURE_BUDGET_MB").is_some() {
+         return None;
+     }
+     let [budget, used, ..] = memory?;
+-    Some(
+-        [
+-            budget,
+-            used,
+-            crate::pool::texture_room(),
+-            crate::shadow::card_room_kept(),
+-            targets_room_kept(),
+-            room_line(budget),
+-        ]
+-        .map(|bytes| bytes >> 20),
+-    )
++    let mut terms = [
++        budget,
++        used,
++        crate::pool::texture_room(),
++        crate::shadow::card_room_kept(),
++        targets_room_kept(),
++        room_line(budget),
++        weighed(budget, used),
++        targets_to_come(),
++        0,
++    ]
++    .map(|bytes| bytes >> 20);
++    terms[8] = u64::from(block_room(memory));
++    Some(terms)
+ }
+ 
+ /// [`room`] as it was at most a tenth of a second ago, for a question
+@@ -2329,12 +2457,7 @@ pub(crate) fn let_go_idle() {
+     let keep = *KEEP
+         .get_or_init(|| !matches!(std::env::var("VICTORY_TEXTURE_KEEP").as_deref(), Ok("0") | Ok("1")));
+     let (idle_ms, most) = match memory {
+-        Some([budget, used, ..]) if keep => {
+-            let used = used.saturating_sub(crate::pool::texture_room())
+-                + crate::shadow::card_room_kept()
+-                + targets_room_kept();
+-            crate::host::vram_keep_below(budget, used, room_line(budget))
+-        }
++        Some([budget, used, ..]) if keep => crate::host::vram_keep_below(budget, weighed(budget, used), room_line(budget)),
+         _ => (crate::host::vram_idle_ms(memory), u64::MAX),
+     };
+     // For the trail (`crate::host::trail`): how many went, their bytes,
+@@ -3042,6 +3165,12 @@ fn host_texture_as(
+         });
+         return Some(t);
+     }
++    // No block has a place for it and the card has no room for a new one
++    // (`crate::pool::gate`), and it can wait: not made with memory of its
++    // own either, which would be the card's memory all the same.
++    if crate::pool::waits() {
++        return None;
++    }
+     let mut texture: Option<ID3D12Resource> = None;
+     let made = if reserved {
+         // The card's own layout of 64 KiB tiles, which a reserved texture
+@@ -5214,6 +5343,54 @@ float4 lit() : SV_Target { return 1.0; }
+ 
+     /// The room kept for render targets goes once the world's targets are
+     /// made and have stopped growing, and comes back when they grow again.
++    /// A block of textures is made only while the card's whole use, with
++    /// the block and what is still to come, stays within the line; and
++    /// while none can be made the free part of the blocks is what the queue
++    /// and the sweep go by.
++    #[test]
++    fn a_block_of_textures_wants_room_for_itself_and_for_what_is_to_come() {
++        const MB: u64 = 1 << 20;
++        // Run 423, 19:14:53: 8,909 MB in use, a line of 9,286, and the
++        // reserve for targets given up: a block fitted, and 1,681 MB of
++        // them were made in five seconds.
++        assert!(block_fits(8909 * MB, 0, 9286 * MB));
++        // With what was still to come of render targets (3,072 - 1,931).
++        assert!(!block_fits(8909 * MB, 1141 * MB, 9286 * MB));
++        // To the byte.
++        assert!(block_fits(1000 * MB, 100 * MB, 1164 * MB));
++        assert!(!block_fits(1000 * MB, 100 * MB, 1164 * MB - 1));
++        // No block can be made: room while more than a block's worth is
++        // free in the blocks there are, whatever the card's use says.
++        let line = 9520 * MB;
++        assert!(blocks_full(line, 65 * MB) < line);
++        assert!(blocks_full(line, 64 * MB) >= line);
++        assert!(blocks_full(line, 0) >= line);
++        // And the sweep (2 % under the line: none go; from there idle ones
++        // go until 5 % under it) keeps 2 to 5 % of the budget and a block
++        // free in them.
++        let budget = 10288 * MB;
++        let step = budget / 100;
++        let none_go = |free: u64| crate::host::vram_keep_below(budget, blocks_full(line, free), line).1 == u64::MAX;
++        assert!(none_go(64 * MB + 2 * step + MB));
++        assert!(!none_go(64 * MB + 2 * step));
++        assert_eq!(crate::host::vram_keep_below(budget, blocks_full(line, 64 * MB + 2 * step), line).1, 3 * step);
++        assert_eq!(crate::host::vram_keep_below(budget, blocks_full(line, 0), line).1, 64 * MB + 5 * step);
++    }
++
++    /// An arena of title memory by address goes to the card only while the
++    /// render targets still to come have room beside it.
++    #[test]
++    fn title_memory_by_address_leaves_room_for_the_targets_to_come() {
++        const MB: u64 = 1 << 20;
++        let budget = 10290 * MB;
++        // Under 97 hundredths of the budget (9,981 MB) with nothing to come.
++        assert!(by_address_fits(budget, 9900 * MB, 64 * MB, 0));
++        assert!(!by_address_fits(budget, 9920 * MB, 64 * MB, 0));
++        // With 1,141 MB of targets to come (run 423, 19:15:04): up to 8,775 MB.
++        assert!(by_address_fits(budget, 8700 * MB, 64 * MB, 1141 * MB));
++        assert!(!by_address_fits(budget, 8800 * MB, 64 * MB, 1141 * MB));
++    }
++
+     #[test]
+     fn room_for_targets_is_given_up_once_they_settle() {
+         const MIB: u64 = 1 << 20;

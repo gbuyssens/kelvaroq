@@ -2,7 +2,7 @@
 
 ## Moteur natif épinglé au 27 novembre 2026
 
-Le constructeur assemble le fork à `9a9091d180f044726463d3db819808086daeebae`, applique les correctifs de `native/patches/` dans l’ordre et ajoute les sources de `native/velkin-render/`. Le reçu `build.json` identifie l’arbre Git compilé, chaque correctif et l’exécutable. Le fork inclut le fil de soumission, la file de copie et la PR 220 de Vyacheslav Venglovsky sur les dessins indirects. L’option de récupération en vol vient de la PR 648 de Jonirulah. [Révision du fork](https://github.com/fxceless/victory-fork/tree/9a9091d180f044726463d3db819808086daeebae). Le recalage depuis `f85101b`, avec les correctifs repris, abandonnés et en attente, est décrit dans [native/RECALAGE.md](native/RECALAGE.md). Le tableau ci-dessous décrit encore les réglages de l'ancien pin : `VICTORY_WIDE_TEXTURES`, `VICTORY_NOT_ZEROED`, `VICTORY_TEXTURE_HEAPS` et les classes de pool Velkin n'existent plus.
+Depuis le 28 novembre 2026, le constructeur assemble VIctory-NVIDIA à `63b902fe1720a5188ee79d94a88c8de0470f6349` et applique les correctifs de `native/patches/` dans l’ordre. Le reçu `build.json` identifie l’arbre Git compilé, chaque correctif et l’exécutable. [Révision du moteur](https://github.com/trustno1-coder/VIctory-NVIDIA/tree/63b902fe1720a5188ee79d94a88c8de0470f6349) · [Le changement de base](native/MOTEUR.md). Le tableau ci-dessous décrit les réglages de l'ancien moteur (victory-fork jusqu'à `9a9091d`) : la plupart n'existent pas dans VIctory-NVIDIA.
 
 | Poste mesuré sur l’ancien moteur | Réglages du moteur à comparer |
 | --- | --- |

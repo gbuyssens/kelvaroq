@@ -1,4 +1,4 @@
-"""Keep native/patches as a git branch on top of victory-fork.
+"""Keep native/patches as a git branch on top of the upstream engine.
 
 native/patches is the published form of a branch: one commit per patch, on
 top of the revision scripts/build_native.py pins. Work happens on the
@@ -6,7 +6,7 @@ branch, where git merges and remembers conflict resolutions (rerere); the
 patches are exported from it.
 
     python scripts/engine.py checkout        # branch "engine" in target/engine
-    python scripts/engine.py rebase <rev>    # move it onto a newer victory-fork
+    python scripts/engine.py rebase <rev>    # move it onto a newer upstream
     python scripts/engine.py export          # write native/patches and the pin
 
 After `rebase` stops on a conflict: resolve it in target/engine, run
@@ -113,7 +113,8 @@ def checkout(args):
         except subprocess.CalledProcessError:
             sys.exit(f"{patch.name} does not apply on {revision[:12]}")
         git(work, "commit", "--quiet", "--allow-empty", "-m", patch.stem)
-    install_render_crate(work)
+    if build_native.uses_render_crate(work):
+        install_render_crate(work)
     print(f"{work}: branch {BRANCH} = {revision[:12]} + {len(patch_files())} patches")
 
 

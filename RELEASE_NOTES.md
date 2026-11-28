@@ -24,4 +24,4 @@ Measured upstream by the Kelvaroq project, not yet reproduced in Velkin: in a 30
 
 Use 64-bit Windows, .NET Framework 4.8 for the desktop workspace, a Direct3D 12-capable GPU and driver, and a legally obtained local installation. Keep the extracted files together. The ZIP includes the native runtime, the reference interpreter and dependency notices.
 
-The launcher and patches derive from Kelvaroq, and the native engine from VIctory and victory-fork, all GPL-3.0-or-later. The package includes their licence in `notices/native/LICENSE`, the build record in `native/build.json`, and the corresponding source in `sources/native.zip`.
+The launcher and patches derive from Kelvaroq, and the native engine from VIctory-NVIDIA (built on VIctory, with victory-fork's memory gate), all GPL-3.0-or-later. The package includes their licence in `notices/native/LICENSE`, the build record in `native/build.json`, and the corresponding source in `sources/native.zip`.

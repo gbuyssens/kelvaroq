@@ -18,8 +18,8 @@ WORK = ROOT / "target/native"
 PATCHES = ROOT / "native/patches"
 RENDER_CRATE = ROOT / "native/velkin-render"
 OUTPUT = ROOT / "target/release/native"
-UPSTREAM = "https://github.com/fxceless/victory-fork.git"
-REVISION = "9a9091d180f044726463d3db819808086daeebae"
+UPSTREAM = "https://github.com/trustno1-coder/VIctory-NVIDIA.git"
+REVISION = "63b902fe1720a5188ee79d94a88c8de0470f6349"
 PLATFORM = "x86_64-pc-windows-msvc"
 ENGINE = "velkin-engine.exe"
 FILES = (ENGINE, "LICENSE", "source.zip", "build.json")
@@ -36,6 +36,14 @@ def git(checkout, *args):
         cwd=checkout,
         env=os.environ | {"TZ": "UTC"},
     )
+
+
+def uses_render_crate(checkout):
+    """Whether a patch made the engine depend on the render crate (its lock
+    names it). The engine's workspace takes every crate under crates/, so an
+    unused copy there would change the lock and fail the locked build."""
+    lock = checkout / "Cargo.lock"
+    return lock.is_file() and b'name = "velkin-render"' in lock.read_bytes()
 
 
 def install_render_source(checkout, crate):
@@ -102,7 +110,8 @@ def checkout_source(checkout, source, revision, patch_dir, render_crate):
                 f"failed to apply {patch.name} to the pinned source"
             ) from error
         patches.append({"name": patch.name, "sha256": hashlib.sha256(data).hexdigest()})
-    install_render_source(checkout, render_crate)
+    if uses_render_crate(checkout):
+        install_render_source(checkout, render_crate)
     # Build the staged tree's normalized source even when the developer's
     # working copy of the overlay used different line endings.
     git(checkout, "checkout-index", "--all", "--force")
@@ -267,7 +276,9 @@ def run(source, output):
                 "tree": git(checkout, "rev-parse", f"{tree}:crates/velkin-render")
                 .decode()
                 .strip(),
-            },
+            }
+            if uses_render_crate(checkout)
+            else None,
             "patches": patches,
             "rust": channel,
             "platform": PLATFORM,
