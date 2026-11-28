@@ -16,12 +16,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / "target/native"
 PATCHES = ROOT / "native/patches"
-RENDER_CRATE = ROOT / "native/kelvaroq-render"
+RENDER_CRATE = ROOT / "native/velkin-render"
 OUTPUT = ROOT / "target/release/native"
-UPSTREAM = "https://github.com/fxceless/victory-fork.git"
-REVISION = "f85101b6095e8cf3cecf8f0647cc7f5428daa177"
+UPSTREAM = "https://github.com/trustno1-coder/VIctory-NVIDIA.git"
+REVISION = "63b902fe1720a5188ee79d94a88c8de0470f6349"
 PLATFORM = "x86_64-pc-windows-msvc"
-ENGINE = "kelvaroq-engine.exe"
+ENGINE = "velkin-engine.exe"
 FILES = (ENGINE, "LICENSE", "source.zip", "build.json")
 
 
@@ -38,12 +38,20 @@ def git(checkout, *args):
     )
 
 
+def uses_render_crate(checkout):
+    """Whether a patch made the engine depend on the render crate (its lock
+    names it). The engine's workspace takes every crate under crates/, so an
+    unused copy there would change the lock and fail the locked build."""
+    lock = checkout / "Cargo.lock"
+    return lock.is_file() and b'name = "velkin-render"' in lock.read_bytes()
+
+
 def install_render_source(checkout, crate):
-    dest = checkout / "crates/kelvaroq-render"
+    dest = checkout / "crates/velkin-render"
     dest.mkdir(parents=True, exist_ok=False)
     src = crate / "src"
     if not src.is_dir() or src.is_symlink():
-        raise ValueError("expected native/kelvaroq-render/src")
+        raise ValueError("expected native/velkin-render/src")
     files = [crate / "Cargo.toml", *sorted(src.rglob("*"))]
     for path in files:
         if path.is_symlink() or not path.resolve().is_relative_to(crate.resolve()):
@@ -53,14 +61,16 @@ def install_render_source(checkout, crate):
         copy = dest / path.relative_to(crate)
         copy.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(path, copy)
-    git(checkout, "add", "--force", "--", "crates/kelvaroq-render")
+    git(checkout, "add", "--force", "--", "crates/velkin-render")
     # The public integration patch pins the first render crate. Keep the
     # staged source lock in step with the local crate included in this ZIP.
     lock = checkout / "Cargo.lock"
     if lock.is_file():
-        version = tomllib.loads((dest / "Cargo.toml").read_text("utf8"))["package"]["version"]
+        version = tomllib.loads((dest / "Cargo.toml").read_text("utf8"))["package"][
+            "version"
+        ]
         data, count = re.subn(
-            rb'(\[\[package\]\]\nname = "kelvaroq-render"\nversion = ")[^"]+(")',
+            rb'(\[\[package\]\]\nname = "velkin-render"\nversion = ")[^"]+(")',
             lambda match: match[1] + version.encode("ascii") + match[2],
             lock.read_bytes(),
         )
@@ -100,7 +110,8 @@ def checkout_source(checkout, source, revision, patch_dir, render_crate):
                 f"failed to apply {patch.name} to the pinned source"
             ) from error
         patches.append({"name": patch.name, "sha256": hashlib.sha256(data).hexdigest()})
-    install_render_source(checkout, render_crate)
+    if uses_render_crate(checkout):
+        install_render_source(checkout, render_crate)
     # Build the staged tree's normalized source even when the developer's
     # working copy of the overlay used different line endings.
     git(checkout, "checkout-index", "--all", "--force")
@@ -139,7 +150,7 @@ def archive_source(checkout, tree, epoch, dest):
         checkout,
         "archive",
         "--format=zip",
-        "--prefix=kelvaroq-engine/",
+        "--prefix=velkin-engine/",
         f"--mtime=@{epoch}",
         f"--output={dest}",
         tree,
@@ -156,7 +167,7 @@ def compile_backend(checkout, tree, epoch):
     home = Path.home()
     flags = [
         f"--remap-path-prefix={checkout}=victory",
-        f"--remap-path-prefix={ROOT}=kelvaroq",
+        f"--remap-path-prefix={ROOT}=velkin",
         f"--remap-path-prefix={home}=builder",
         f"--remap-path-prefix={os.environ.get('CARGO_HOME', home / '.cargo')}=cargo",
         "-Clink-arg=/PDBALTPATH:%_PDB%",
@@ -261,11 +272,13 @@ def run(source, output):
             "revision": REVISION,
             "patched_tree": tree,
             "render_crate": {
-                "path": "crates/kelvaroq-render",
-                "tree": git(checkout, "rev-parse", f"{tree}:crates/kelvaroq-render")
+                "path": "crates/velkin-render",
+                "tree": git(checkout, "rev-parse", f"{tree}:crates/velkin-render")
                 .decode()
                 .strip(),
-            },
+            }
+            if uses_render_crate(checkout)
+            else None,
             "patches": patches,
             "rust": channel,
             "platform": PLATFORM,
@@ -299,6 +312,4 @@ if __name__ == "__main__":
     result = run(
         str(args.source.resolve()) if args.source else UPSTREAM, args.output.resolve()
     )
-    print(
-        f"Installed {args.output} ({ENGINE} SHA-256 {result['sha256'][ENGINE]})"
-    )
+    print(f"Installed {args.output} ({ENGINE} SHA-256 {result['sha256'][ENGINE]})")

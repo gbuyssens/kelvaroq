@@ -12,7 +12,7 @@ pub struct HalfBlock {
 /// # Safety
 /// The caller supplies a writable, aligned and initialized `HalfBlock`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kelvaroq_half(op: u32, imm: u8, state: *mut HalfBlock) -> u32 {
+pub unsafe extern "C" fn velkin_half(op: u32, imm: u8, state: *mut HalfBlock) -> u32 {
     let Some(state) = (unsafe { state.as_mut() }) else {
         return 1;
     };
@@ -74,13 +74,13 @@ mod tests {
         };
         state.lanes[..4].copy_from_slice(&0x3f80_1000u32.to_le_bytes());
         let before = host_mxcsr();
-        assert_eq!(unsafe { kelvaroq_half(0, 4, &mut state) }, 0);
+        assert_eq!(unsafe { velkin_half(0, 4, &mut state) }, 0);
         assert_eq!(&state.lanes[..2], &0x3c01u16.to_le_bytes());
         assert_eq!(state.mxcsr, 0x5fa0);
         assert_eq!(host_mxcsr(), before);
         let bits = state.lanes;
         state.mxcsr = 0;
-        assert_eq!(unsafe { kelvaroq_half(1, 0, &mut state) }, 3);
+        assert_eq!(unsafe { velkin_half(1, 0, &mut state) }, 3);
         assert_eq!(state.lanes, bits);
         assert_eq!(state.mxcsr, 0);
         assert_eq!(host_mxcsr(), before);

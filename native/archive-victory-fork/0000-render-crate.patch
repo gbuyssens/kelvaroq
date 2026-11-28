@@ -1,0 +1,35 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 29bab8c72233fbd9552e646c79316bc9439df0d7..4b0ae89a823128444ef7b5d84712cf594a11a7a0 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -236,6 +236,10 @@ version = "1.70.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
+ 
++[[package]]
++name = "velkin-render"
++version = "0.1.0"
++
+ [[package]]
+ name = "lazy_static"
+ version = "1.5.1"
+@@ -675,6 +679,7 @@ version = "0.1.0"
+ dependencies = [
+  "anyhow",
+  "blake3",
++ "velkin-render",
+  "tempfile",
+  "tracing",
+  "victory-formats",
+diff --git a/crates/victory-gpu/Cargo.toml b/crates/victory-gpu/Cargo.toml
+index e6d844522016d5bb476dc04ad972b0e0498d7c86..9ae8eaabc09036d59724380ba3dbf69c186524fe 100644
+--- a/crates/victory-gpu/Cargo.toml
++++ b/crates/victory-gpu/Cargo.toml
+@@ -8,6 +8,7 @@ license.workspace = true
+ publish.workspace = true
+ 
+ [dependencies]
++velkin-render = { path = "../velkin-render" }
+ blake3.workspace = true
+ zlib-rs.workspace = true
+ tracing.workspace = true

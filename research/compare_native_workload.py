@@ -24,11 +24,11 @@ HOST = re.compile(
 )
 PAIR = re.compile(r"^[0-9a-f]{16}/[0-9a-f]{16}$")
 TOTAL = re.compile(
-    r"KELVAROQ_QUEUE_TOTAL frame=(\d+) draws=(\d+) drawn=(\d+) dispatches=(\d+) dispatched=(\d+)$"
+    r"VELKIN_QUEUE_TOTAL frame=(\d+) draws=(\d+) drawn=(\d+) dispatches=(\d+) dispatched=(\d+)$"
 )
-SUCCESS = re.compile(r"KELVAROQ_PRESENT frame=(\d+)(?: interval_us=(\d+))?$")
+SUCCESS = re.compile(r"VELKIN_PRESENT frame=(\d+)(?: interval_us=(\d+))?$")
 BOUND = re.compile(
-    r"KELVAROQ_MESH_BIND frame=(\d+) guest_token=\d+ mesh=([0-9a-f]{16}) pixel=([0-9a-f]{16})$"
+    r"VELKIN_MESH_BIND frame=(\d+) guest_token=\d+ mesh=([0-9a-f]{16}) pixel=([0-9a-f]{16})$"
 )
 
 
@@ -100,9 +100,9 @@ def read_journal(path):
                 elif any(
                     k in line
                     for k in (
-                        "KELVAROQ_QUEUE_TOTAL ",
-                        "KELVAROQ_PRESENT ",
-                        "KELVAROQ_MESH_BIND ",
+                        "VELKIN_QUEUE_TOTAL ",
+                        "VELKIN_PRESENT ",
+                        "VELKIN_MESH_BIND ",
                     )
                 ):
                     raise ValueError(f"malformed native workload record in {log.name}")

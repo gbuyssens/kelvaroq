@@ -8,14 +8,14 @@ using System.Web.Script.Serialization;
 using System.Xml;
 using System.Xml.Linq;
 
-namespace Kelvaroq {
+namespace Velkin {
 internal sealed class Problem : Exception {
     internal Problem(string key) : base(key) {}
 }
 internal static class Files {
     internal static readonly StringComparer Names = StringComparer.OrdinalIgnoreCase;
     internal static JavaScriptSerializer Json { get { return new JavaScriptSerializer { MaxJsonLength = 8 * 1024 * 1024 }; } }
-    internal static string Unique(string parent) { return Path.Combine(parent, ".kelvaroq-" + Guid.NewGuid().ToString("N")); }
+    internal static string Unique(string parent) { return Path.Combine(parent, ".velkin-" + Guid.NewGuid().ToString("N")); }
     internal static void Publish(string temp, string path) {
         if (File.Exists(path)) File.Replace(temp, path, null);
         else File.Move(temp, path);
@@ -95,7 +95,14 @@ internal static class Files {
 /// Approach after XCL 50a9fde: find the manifest that declares a nested executable.
 /// Approach after XCL 817328d: decode XML before interpreting executable entries.
 internal sealed class Installation {
-    internal string Root, Image;
+    internal string Root, Image, Title;
+    /// The name shown in the console shell, unless it is a localized resource reference; the folder name otherwise.
+    static string Shown(XDocument doc,string root) {
+        var visuals = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "ShellVisuals");
+        var name = visuals == null ? null : (string)visuals.Attribute("DefaultDisplayName");
+        if (String.IsNullOrWhiteSpace(name) || name.StartsWith("ms-resource:",StringComparison.OrdinalIgnoreCase)) name = new DirectoryInfo(root).Name;
+        return name.Trim();
+    }
     internal static Installation Select(string selection) {
         string path = Files.Full(selection);
         bool folder = Directory.Exists(path);
@@ -123,7 +130,7 @@ internal sealed class Installation {
                 string exe = folder ? names.FirstOrDefault() : path;
                 if (exe == null || !names.Contains(exe) || !File.Exists(exe)) throw new Problem("wrongExe");
                 Files.NoLinks(exe);
-                return new Installation { Root = parent.FullName, Image = exe };
+                return new Installation { Root = parent.FullName, Image = exe, Title = Shown(doc,parent.FullName) };
             }
             if (folder) break;
             parent = parent.Parent;
@@ -142,15 +149,18 @@ internal sealed class Preferences {
     public bool monitor { get; set; }
     public bool preload { get; set; }
     public bool customProfile { get; set; }
+    public bool discord { get; set; }
+    public bool discordGame { get; set; }
+    public string discordAppId { get; set; }
     public Dictionary<string,int> profileValues { get; set; }
     public int recent { get; set; }
     public int days { get; set; }
     public Preferences() {
-        schema_version = 2; updates = true; language = "system"; recent = 8; days = 14; preload = true;
+        schema_version = 2; updates = true; language = "system"; recent = 8; days = 14; preload = true; discord = true; discordGame = true;
         profileValues = new Dictionary<string,int>();
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var legacy = Path.Combine(local,"victory");
-        var root = Directory.Exists(legacy) || !Product.Enabled("VICTORY_LAUNCHER_STORAGE") ? legacy : Path.Combine(local,"Kelvaroq");
+        var root = Directory.Exists(legacy) || !Product.Enabled("VICTORY_LAUNCHER_STORAGE") ? legacy : Path.Combine(local,"Velkin");
         cache = Environment.GetEnvironmentVariable("VICTORY_CACHE_DIR") ?? Path.Combine(root,"cache");
         data = Environment.GetEnvironmentVariable("VICTORY_DATA_DIR") ?? Path.Combine(root,"data");
     }

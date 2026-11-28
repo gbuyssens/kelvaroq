@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-MARKER = "KELVAROQ_FRAME_TIMINGS "
+MARKER = "VELKIN_FRAME_TIMINGS "
 QUEUE_MARKER = "frame presented (since the last line: draws and dispatches, and those run on the host)"
 QUEUE_FIELDS = ("draws", "drawn", "dispatches", "dispatched")
 METRICS = ("p50", "p95", "p99")

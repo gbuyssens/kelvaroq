@@ -144,7 +144,7 @@ impl Window {
             CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
             let apartment = Apartment;
             let instance = GetModuleHandleW(None)?.into();
-            let class = w!("KelvaroqShaderPreload");
+            let class = w!("VelkinShaderPreload");
             let wc = WNDCLASSW {
                 lpfnWndProc: Some(events),
                 hInstance: instance,
@@ -163,7 +163,7 @@ impl Window {
             let form = Form(CreateWindowExW(
                 WS_EX_APPWINDOW,
                 class,
-                w!("Kelvaroq"),
+                w!("Velkin"),
                 WS_POPUP,
                 (GetSystemMetrics(SM_CXSCREEN) - w) / 2,
                 (GetSystemMetrics(SM_CYSCREEN) - h) / 2,
@@ -398,7 +398,7 @@ impl Canvas {
             self.target
                 .Clear(Some(&color(tone(0xf7f9f7, 0x1b211e), 1.)));
         }
-        self.text("Kelvaroq", &self.brand, rect(52., 42., 410., 44.), ink);
+        self.text("Velkin", &self.brand, rect(52., 42., 410., 44.), ink);
         self.text(
             t("warmTitle"),
             &self.heading,
@@ -518,7 +518,7 @@ impl Canvas {
                 0.21 + 0.15 * (t + i as f32).sin(),
             );
         }
-        self.text("Kelvaroq", &self.brand, rect(98., 40., 255., 40.), PAPER);
+        self.text("Velkin", &self.brand, rect(98., 40., 255., 40.), PAPER);
         self.text(
             "Préchargement",
             &self.heading,

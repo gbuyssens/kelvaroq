@@ -3,7 +3,6 @@
 
 use crate::preload::visual::t;
 use anyhow::{Context, Result, ensure};
-use kelvaroq_render::stats_ring::{ABSENT, CAPACITY, Reader, Writer};
 use std::{
     collections::{HashMap, VecDeque},
     fs::File,
@@ -11,6 +10,7 @@ use std::{
     path::Path,
     time::{Duration, Instant},
 };
+use velkin_render::stats_ring::{ABSENT, CAPACITY, Reader, Writer};
 
 #[derive(Clone)]
 pub struct History {
@@ -75,11 +75,11 @@ impl History {
             if t + 1_000_000 <= end {
                 break;
             }
-            if t <= end {
-                if let Some(v) = self.get(r, key) {
-                    sum += v as f64;
-                    n += 1;
-                }
+            if t <= end
+                && let Some(v) = self.get(r, key)
+            {
+                sum += v as f64;
+                n += 1;
             }
         }
         (n > 0).then(|| sum / n as f64)
@@ -256,7 +256,7 @@ impl Feed {
     pub fn record(&self) -> Result<String> {
         use std::time::{SystemTime, UNIX_EPOCH};
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
-        let name = format!("kelvaroq-{}-{stamp}.csv", self.pid.unwrap_or(0));
+        let name = format!("velkin-{}-{stamp}.csv", self.pid.unwrap_or(0));
         self.view().csv(Path::new(&name)).context(t("csvError"))?;
         Ok(name)
     }

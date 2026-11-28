@@ -6,18 +6,18 @@
 | --- | --- |
 | `src/main.rs` | Commandes publiques, exécution du worker et codes de sortie. |
 | `src/native.rs`, `scripts/build_native.py` | Lancement du backend natif, assemblage du code épinglé et vérification du paquet livré. |
-| `native/kelvaroq-render/src/`, `native/patches/` | Algorithmes de rendu écrits dans Kelvaroq, tests associés et raccords aux points d’appel de VIctory. |
-| `src/bin/kelvaroq-launcher.rs`, `src/package.rs` | Sélection du dossier ou du fichier dans Windows et résolution de l’exécutable déclaré. |
+| `native/velkin-render/src/`, `native/patches/` | Algorithmes de rendu écrits dans Velkin, tests associés et raccords aux points d’appel de VIctory. |
+| `src/bin/velkin-launcher.rs`, `src/package.rs` | Sélection du dossier ou du fichier dans Windows et résolution de l’exécutable déclaré. |
 | `src/desktop.rs` | Fenêtre de rendu, fenêtre de journal et durée de vie du processus de référence. |
 | `src/simd.rs`, `src/simd_vector.rs` | Calculs flottants x64 de référence et isolation de l’environnement flottant de l’hôte. |
 | `src/image.rs` | Validation du PE x64, contrôle des bornes, sections, imports, données TLS et empreinte. |
 | `src/gpu.rs` | Interfaces Direct3D 12 et DXGI, soumission, fence et vérification du contenu GPU. |
-| `research/kelvaroq_reference/memory.py` | Cartographie invitée, TLS, pile et contrôle des accès des services. |
-| `research/kelvaroq_reference/cpu.py` | ABI x64, ordre des appels, reprise après initialiseur et budget d’exécution. |
-| `research/kelvaroq_reference/kernel.py`, `crt.py`, `registry.py` | Sémantique des services émulés et état par processus invité. |
-| `research/kelvaroq_reference/graphics_memory.py` | Plages d’adresses virtuelles graphiques, granularité et suivi des réservations invitées. |
-| `research/kelvaroq_reference/synchronization.py` | Handles invités, événements, sémaphores et sémantique des attentes. |
-| `research/kelvaroq_reference/vector.py`, `vector_operands.py`, `packed_integer.py` | Décodage VEX, lecture des opérandes invités et sémantique des opérations entières par voie. |
+| `research/velkin_reference/memory.py` | Cartographie invitée, TLS, pile et contrôle des accès des services. |
+| `research/velkin_reference/cpu.py` | ABI x64, ordre des appels, reprise après initialiseur et budget d’exécution. |
+| `research/velkin_reference/kernel.py`, `crt.py`, `registry.py` | Sémantique des services émulés et état par processus invité. |
+| `research/velkin_reference/graphics_memory.py` | Plages d’adresses virtuelles graphiques, granularité et suivi des réservations invitées. |
+| `research/velkin_reference/synchronization.py` | Handles invités, événements, sémaphores et sémantique des attentes. |
+| `research/velkin_reference/vector.py`, `vector_operands.py`, `packed_integer.py` | Décodage VEX, lecture des opérandes invités et sémantique des opérations entières par voie. |
 | `scripts/check_shaders.py` | Construit le traducteur de référence à partir des PR épinglées et vérifie ses résultats sur le GPU nommé. |
 | `research/tests/` | Cas minimaux originaux qui exercent le comportement public et les contrats CPU. |
 
@@ -27,7 +27,6 @@
 4. Le code Rust garde les appels `unsafe` au niveau de l’API native. Le relecteur vérifie les durées de vie, les tailles et la fin du travail GPU avant recyclage. Les tests de rendu relisent des valeurs attendues.
 5. Une optimisation GPU conserve l’image attendue et les dépendances d’écriture. Joindre la scène, la résolution, le pilote et la dispersion des temps de trame. Un chiffre de FPS seul ne suffit pas pour accepter une optimisation.
 6. Versionner le code source, les fixtures synthétiques et les résultats anonymisés. Garder les exécutables, captures de jeu, chemins personnels et données commerciales hors du dépôt. Pour le binaire de recherche, employer l’empreinte et les RVA.
-7. À chaque clonage, activer `git config core.hooksPath .githooks`. Chaque commit porte la ligne `Co-authored-by: Moon AI (https://chat.realmoon.ai)`. Le hook l’ajoute et la CI contrôle les commits proposés.
 
 ## Vérifications avant intégration
 
@@ -41,5 +40,5 @@ cargo build --release --locked
 .\.venv\Scripts\ruff check research scripts
 .\.venv\Scripts\ruff format --check research scripts
 .\.venv\Scripts\python -m unittest discover -v -s research/tests
-.\target\release\kelvaroq gpu
+.\target\release\velkin gpu
 ```

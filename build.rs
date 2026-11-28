@@ -16,7 +16,7 @@ fn main() {
         .expect("building Windows desktop resources requires Python 3");
     assert!(status.success(), "Windows desktop resource build failed");
     println!(
-        "cargo:rustc-link-arg-bin=kelvaroq-launcher={}",
+        "cargo:rustc-link-arg-bin=velkin-launcher={}",
         out.join("launcher.res").display()
     );
 }

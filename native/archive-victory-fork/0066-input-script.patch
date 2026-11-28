@@ -1,0 +1,60 @@
+diff --git a/crates/victory-hle/src/modules/gameinput.rs b/crates/victory-hle/src/modules/gameinput.rs
+index 838826e1106d34f6da24f5bc0e13e3de86055fb0..714c8608719189c8fc8657e3c7589cfab62feb38 100644
+--- a/crates/victory-hle/src/modules/gameinput.rs
++++ b/crates/victory-hle/src/modules/gameinput.rs
+@@ -1144,13 +1144,15 @@ mod host {
+                 return None;
+             }
+             self.empty_until[slot] = None;
++            if keys_only() {
++                return None;
++            }
+             #[allow(unused_mut)]
+             let mut pad = convert(&state.Gamepad);
+             // The scripted keys (`VICTORY_KEYS`) also press the first
+             // pad's buttons, by the stand-in pad's table: with a real pad
+             // connected the stand-in is not there, and a title that listens
+             // to the pad (the title's start screen) saw nothing.
+-            #[cfg(feature = "diagnostics")]
+             if slot == 0 {
+                 for vk in scripted() {
+                     if let Some(&(_, button)) = super::FALLBACK_BUTTONS.iter().find(|(key, _)| *key == vk) {
+@@ -1162,11 +1164,8 @@ mod host {
+         }
+ 
+         fn keys(&mut self) -> Vec<KeyState> {
+-            #[cfg(feature = "diagnostics")]
+             let mut down = scripted();
+-            #[cfg(not(feature = "diagnostics"))]
+-            let mut down = Vec::new();
+-            if focused() {
++            if focused() && !keys_only() {
+                 // Left/right modifier keys only, as devices report them; no
+                 // mouse buttons (below 0x08).
+                 let held: Vec<u8> = (0x08..=0xFE_u8)
+@@ -1202,7 +1201,9 @@ mod host {
+     /// 0.2 s that long after input starts, with or without focus. A key is a
+     /// letter, a digit, or `Enter`, `Esc`, `Tab`, `Back`, `Up`, `Down`,
+     /// `Left`, `Right` (the stand-in pad's table maps them to buttons).
+-    #[cfg(feature = "diagnostics")]
++    /// Patch 0066: available in every build (unset: no key, no cost
++    /// beyond an empty list), so a measurement run can reach the same scene
++    /// at the same moment without a human hand.
+     fn scripted() -> Vec<u8> {
+         static SCRIPT: LazyLock<(Instant, Vec<(Duration, u8)>)> = LazyLock::new(|| {
+             let list = std::env::var("VICTORY_KEYS").unwrap_or_default();
+@@ -1237,6 +1238,14 @@ mod host {
+             .collect()
+     }
+ 
++    /// Patch 0066: `VICTORY_KEYS_ONLY=1` ignores the host keyboard and
++    /// pads, so only the scripted keys reach the title (reproducible runs).
++    fn keys_only() -> bool {
++        static ON: LazyLock<bool> =
++            LazyLock::new(|| std::env::var_os("VICTORY_KEYS_ONLY").is_some_and(|v| v == "1"));
++        *ON
++    }
++
+     /// The foreground window is one of ours (the title's or our fallback).
+     fn focused() -> bool {
+         let mut process = 0;

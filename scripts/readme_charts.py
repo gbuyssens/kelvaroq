@@ -45,7 +45,9 @@ THEMES = {
         "s2": "#e76624",
     },
 }
-FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif"
+FONT = (
+    "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif"
+)
 
 
 def bar(x, y, w, base):
@@ -78,19 +80,29 @@ def milestones(t):
     width, height = 760, 380
     left, right, top, base = 72, 644, 92, 300
     most = 300.0
-    y = lambda v: base - (base - top) * v / most  # noqa: E731
+    y = lambda v: base - (base - top) * v / most
     body = [
         text(24, 34, "Median frame time of heavy frames", t["text"], 17, weight=600),
-        text(24, 56, "Prologue, 3840×2160, RTX 5080, frames with 3,000 draws or more · lower is better", t["muted"], 12),
+        text(
+            24,
+            56,
+            "Prologue, 3840×2160, RTX 5080, frames with 3,000 draws or more · lower is better",
+            t["muted"],
+            12,
+        ),
     ]
     for v in (0, 100, 200, 300):
-        body.append(f'<line x1="{left}" x2="{right}" y1="{y(v):.1f}" y2="{y(v):.1f}" stroke="{t["grid"]}" stroke-width="1"/>')
+        body.append(
+            f'<line x1="{left}" x2="{right}" y1="{y(v):.1f}" y2="{y(v):.1f}" stroke="{t["grid"]}" stroke-width="1"/>'
+        )
         body.append(text(left - 10, y(v) + 4, f"{v} ms", t["muted"], 11, "end"))
     slot = (right - left) / len(MILESTONES)
     w = 64
     for i, ((l1, l2), patches, value, label) in enumerate(MILESTONES):
         cx = left + slot * (i + 0.5)
-        body.append(f'<path d="{bar(cx - w / 2, y(value), w, base)}" fill="{t["s1"]}"/>')
+        body.append(
+            f'<path d="{bar(cx - w / 2, y(value), w, base)}" fill="{t["s1"]}"/>'
+        )
         body.append(text(cx, y(value) - 8, label, t["text"], 12, "middle", 600))
         body.append(text(cx, base + 20, l1, t["text"], 12, "middle"))
         body.append(text(cx, base + 36, l2, t["text"], 12, "middle"))
@@ -102,36 +114,72 @@ def milestones(t):
     )
     body.append(text(right + 12, ty - 2, "30 fps target", t["muted"], 11))
     body.append(text(right + 12, ty + 13, "33.3 ms", t["muted"], 11))
-    return frame(width, height, t, body, "Median frame time of heavy frames by milestone")
+    return frame(
+        width, height, t, body, "Median frame time of heavy frames by milestone"
+    )
 
 
 def ab(t):
     width, height = 760, 330
     left, right, top, base = 72, 736, 96, 286
     most = 350.0
-    y = lambda v: base - (base - top) * v / most  # noqa: E731
+    y = lambda v: base - (base - top) * v / most
     body = [
-        text(24, 34, "Patches 0041–0042, A/B in the heavy scene", t["text"], 17, weight=600),
-        text(24, 56, "Same save and warm pipeline cache, 300 s each · 959 heavy frames before, 1,564 after", t["muted"], 12),
+        text(
+            24,
+            34,
+            "Patches 0041–0042, A/B in the heavy scene",
+            t["text"],
+            17,
+            weight=600,
+        ),
+        text(
+            24,
+            56,
+            "Same save and warm pipeline cache, 300 s each · 959 heavy frames before, 1,564 after",
+            t["muted"],
+            12,
+        ),
     ]
     # Legend, top right: swatch then name, in text ink.
     lx = right - 300
-    for k, (name, color) in enumerate((("Before (0038–0040)", t["s2"]), ("After (0041–0042)", t["s1"]))):
+    for k, (name, color) in enumerate(
+        (("Before (0038–0040)", t["s2"]), ("After (0041–0042)", t["s1"]))
+    ):
         x = lx + k * 156
-        body.append(f'<rect x="{x}" y="74" width="12" height="12" rx="3" fill="{color}"/>')
+        body.append(
+            f'<rect x="{x}" y="74" width="12" height="12" rx="3" fill="{color}"/>'
+        )
         body.append(text(x + 18, 84, name, t["text"], 12))
     for v in (0, 100, 200, 300):
-        body.append(f'<line x1="{left}" x2="{right}" y1="{y(v):.1f}" y2="{y(v):.1f}" stroke="{t["grid"]}" stroke-width="1"/>')
+        body.append(
+            f'<line x1="{left}" x2="{right}" y1="{y(v):.1f}" y2="{y(v):.1f}" stroke="{t["grid"]}" stroke-width="1"/>'
+        )
         body.append(text(left - 10, y(v) + 4, f"{v} ms", t["muted"], 11, "end"))
     slot = (right - left) / len(AB)
     w, gap = 56, 2
     for i, (name, before, after) in enumerate(AB):
         cx = left + slot * (i + 0.5)
-        for value, color, x in ((before, t["s2"], cx - gap / 2 - w), (after, t["s1"], cx + gap / 2)):
+        for value, color, x in (
+            (before, t["s2"], cx - gap / 2 - w),
+            (after, t["s1"], cx + gap / 2),
+        ):
             body.append(f'<path d="{bar(x, y(value), w, base)}" fill="{color}"/>')
-            body.append(text(x + w / 2, y(value) - 8, f"{value:.1f}", t["text"], 12, "middle", 600))
+            body.append(
+                text(
+                    x + w / 2,
+                    y(value) - 8,
+                    f"{value:.1f}",
+                    t["text"],
+                    12,
+                    "middle",
+                    600,
+                )
+            )
         body.append(text(cx, base + 22, name, t["text"], 12, "middle"))
-    return frame(width, height, t, body, "Heavy-frame times before and after patches 0041-0042")
+    return frame(
+        width, height, t, body, "Heavy-frame times before and after patches 0041-0042"
+    )
 
 
 def main():

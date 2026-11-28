@@ -9,9 +9,9 @@ from unittest.mock import patch
 from unicorn import UC_ARCH_X86, UC_MODE_64, UC_PROT_READ, Uc
 from unicorn.x86_const import UC_X86_REG_RCX, UC_X86_REG_RDX
 
-from kelvaroq_reference.kernel import Kernel
-from kelvaroq_reference.memory import DWORD, GuestFault
-from kelvaroq_reference.topology import ProcessorInfo, manifest_smt_enabled
+from velkin_reference.kernel import Kernel
+from velkin_reference.memory import DWORD, GuestFault
+from velkin_reference.topology import ProcessorInfo, manifest_smt_enabled
 
 
 class ManifestTests(unittest.TestCase):
@@ -86,7 +86,7 @@ class ProcessorInfoTests(unittest.TestCase):
             "<QI20x", 3, 0
         )
         with patch(
-            "kelvaroq_reference.topology.windows_records", return_value=capture
+            "velkin_reference.topology.windows_records", return_value=capture
         ) as read:
             info = ProcessorInfo(capture, host_topology=True)
             self.assertEqual(info.source, "supplied-records")

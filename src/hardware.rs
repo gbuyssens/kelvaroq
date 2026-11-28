@@ -137,7 +137,8 @@ fn count_cores(mut bytes: &[u8]) -> Option<(u32, u32)> {
         let end = masks_at + usize::from(groups) * size_of::<GROUP_AFFINITY>();
         for group in record
             .get(masks_at..end)?
-            .chunks_exact(size_of::<GROUP_AFFINITY>())
+            .as_chunks::<{ size_of::<GROUP_AFFINITY>() }>()
+            .0
         {
             logical +=
                 usize::from_ne_bytes(group[..size_of::<usize>()].try_into().ok()?).count_ones();
@@ -215,7 +216,7 @@ impl Machine {
 /// # Safety
 /// The caller supplies a writable buffer of at least `capacity` bytes.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn kelvaroq_hardware(output: *mut u8, capacity: usize) -> usize {
+pub unsafe extern "system" fn velkin_hardware(output: *mut u8, capacity: usize) -> usize {
     if output.is_null() {
         return 0;
     }
@@ -245,7 +246,9 @@ mod tests {
             record[4..8].copy_from_slice(&(size as u32).to_ne_bytes());
             record[count..count + 2].copy_from_slice(&(values.len() as u16).to_ne_bytes());
             for (group, mask) in record[masks..]
-                .chunks_exact_mut(size_of::<GROUP_AFFINITY>())
+                .as_chunks_mut::<{ size_of::<GROUP_AFFINITY>() }>()
+                .0
+                .iter_mut()
                 .zip(values)
             {
                 group[..size_of::<usize>()].copy_from_slice(&mask.to_ne_bytes());

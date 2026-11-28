@@ -8,12 +8,12 @@ BEGIN
  BEGIN
   BLOCK "040904B0"
   BEGIN
-   VALUE "CompanyName", "Stellarr Studio SAS\0"
-   VALUE "ProductName", "Kelvaroq\0"
-   VALUE "FileDescription", "Kelvaroq\0"
+   VALUE "CompanyName", "Velkin contributors\0"
+   VALUE "ProductName", "Velkin\0"
+   VALUE "FileDescription", "Velkin\0"
    VALUE "FileVersion", "@VERSION@\0"
    VALUE "ProductVersion", "@VERSION@\0"
-   VALUE "OriginalFilename", "Kelvaroq.exe\0"
+   VALUE "OriginalFilename", "Velkin.exe\0"
   END
  END
  BLOCK "VarFileInfo"

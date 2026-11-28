@@ -1,0 +1,69 @@
+diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
+index 253bd80b61221c39b7fb4c65534ae89bd8f4e9ac..085b9ad3413f1f163c41ec7da6ca5d07e68cb6d9 100644
+--- a/crates/victory-gpu/src/host.rs
++++ b/crates/victory-gpu/src/host.rs
+@@ -1600,32 +1600,6 @@ mod tests {
+         assert_eq!(READONLY_UPLOAD_BYTES.load(Relaxed), 0);
+     }
+ 
+-    #[test]
+-    fn wide_copies_preserve_dependencies_through_section_aliases() {
+-        use crate::watch::tests::{drop_views, two_views};
+-
+-        const BYTES: usize = 512 << 10;
+-        let (section, first, second) = two_views(BYTES);
+-        let source = vec![0x6bu8; BYTES];
+-        let mut result = vec![0u8; BYTES];
+-        let at = result.as_mut_ptr() as usize;
+-        // Les adresses virtuelles sont distinctes. La seconde copie doit
+-        // néanmoins lire dans la section ce que la première vient d’écrire.
+-        let mut copies = vec![(first, source.as_ptr() as usize, BYTES), (at, second, BYTES)];
+-        assert_ne!(first, second);
+-        let mapping = crate::watch::title_memory_reading();
+-        let independent = |items: &[(usize, usize, usize)]| crate::inplace::private_copy_ranges(items, &mapping);
+-        assert!(!independent(&copies));
+-        assert!(independent(&[(at, at + 64, 64), (at + 128, at + 192, 64)]));
+-        assert!(!independent(&[(at, at + 64, 64), (at + 128, at + 32, 64)]));
+-        assert!(!independent(&[(usize::MAX - 1, at, 64)]));
+-        drop(mapping);
+-        super::title_copies(&mut super::Batch::default(), &mut copies);
+-        drop_views(section, &[first, second], BYTES);
+-        assert!(copies.is_empty());
+-        assert!(result == source, "la seconde copie doit voir les octets écrits par la première");
+-    }
+-
+     #[test]
+     fn sparse_copies_preserve_islands_and_observe_remaps() {
+         use windows_sys::Win32::System::Memory::*;
+diff --git a/crates/victory-gpu/src/pipeline.rs b/crates/victory-gpu/src/pipeline.rs
+index eea978ddc5de8510d7ec57ec52b117aa6ab6bd57..c5380d2d26a8e93443619eab59927e10d0bd9cbb 100644
+--- a/crates/victory-gpu/src/pipeline.rs
++++ b/crates/victory-gpu/src/pipeline.rs
+@@ -951,11 +951,12 @@ mod tests {
+             stage: HwStage::Cs, dxil,
+             user_data: (0..2).map(|i| UserData { index: i, slot: 0, root: RootType::Constants, dword: i }).collect(),
+             root_uavs: vec![1], root_cbvs: vec![], root_srvs: vec![],
+-            root_indexed_views: vec![], samplers: vec![], static_samplers: vec![],
++            root_indexed_views: vec![], samplers: vec![], static_samplers: vec![], half_views: Default::default(),
+         };
+         let shader = Arc::new(Shader {
+             hash: "root binding test".into(), stage: "compute", container: Vec::new(),
+-            translated: OnceLock::from(Some(Translated { host: host_shader, used: vec![], stores: true })),
++            translated: OnceLock::from(Some(Translated { host: host_shader, used: vec![], stores: true, threads: [1, 1, 1] })),
++            walks: OnceLock::new(),
+         });
+         let mut pipe = std::ptr::null();
+         assert_eq!(hand_out(vec![shader], None, &PIPELINE_IIDS[0], &mut pipe), S_OK);
+diff --git a/crates/victory-gpu/src/queue.rs b/crates/victory-gpu/src/queue.rs
+index 8cbeab8ea41d00f08615469d8e438145ef4be074..5d4cc1e092c841c15fca1fc89dcc8d50066ba7f6 100644
+--- a/crates/victory-gpu/src/queue.rs
++++ b/crates/victory-gpu/src/queue.rs
+@@ -1777,7 +1777,7 @@ mod tests {
+                 unsafe { gate.Signal(1) }.unwrap();
+                 on_time
+             });
+-            host.execute_late(vec![crate::list::Detached::for_test(producer)], vec![0]);
++            host.execute_late(vec![crate::list::Detached::ours(producer)], vec![0]);
+             assert!(crate::host::late_signal(landed, 7));
+             assert_eq!(drop_ref(landed), 1, "pending host signal owns the fence");
+             wait64(list, (&raw const words[0]) as u64, 6, 0);

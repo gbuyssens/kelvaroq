@@ -6,7 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace Kelvaroq {
+namespace Velkin {
 internal sealed class Gpu {
     public string name { get; set; }
     public int vendor { get; set; }
@@ -53,8 +53,8 @@ internal sealed class Hardware {
     internal bool Multiple { get { return gpus != null && gpus.Length > 1; } }
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.ApplicationDirectory | DllImportSearchPath.System32)]
-    [DllImport("kelvaroq_simd.dll", ExactSpelling = true)]
-    static extern UIntPtr kelvaroq_hardware([Out] byte[] buffer, UIntPtr capacity);
+    [DllImport("velkin_simd.dll", ExactSpelling = true)]
+    static extern UIntPtr velkin_hardware([Out] byte[] buffer, UIntPtr capacity);
 
     static string ReadName(string key,string value) {
         try { return Convert.ToString(Registry.GetValue(key,value,null)).Trim(); }
@@ -66,7 +66,7 @@ internal sealed class Hardware {
         var machine = new Hardware();
         try {
             var bytes = new byte[64 * 1024];
-            int size = checked((int)kelvaroq_hardware(bytes,(UIntPtr)bytes.Length).ToUInt64());
+            int size = checked((int)velkin_hardware(bytes,(UIntPtr)bytes.Length).ToUInt64());
             if (size > 0) machine = Files.Json.Deserialize<Hardware>(Encoding.UTF8.GetString(bytes,0,size));
         } catch (DllNotFoundException) {}
           catch (EntryPointNotFoundException) {}

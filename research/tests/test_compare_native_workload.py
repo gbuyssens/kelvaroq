@@ -18,7 +18,7 @@ def bindings(frame, n, address=1):
 
 def window(first):
     return (
-        f"KELVAROQ_FRAME_TIMINGS frames={first}..{first + 30} samples=30 "
+        f"VELKIN_FRAME_TIMINGS frames={first}..{first + 30} samples=30 "
         "cpu_present_p50_us=16000 cpu_present_p95_us=36000 cpu_present_p99_us=41000\n"
     )
 
@@ -26,20 +26,20 @@ def window(first):
 class WorkloadTests(unittest.TestCase):
     def test_detailed_mode_uses_presentx_ids_and_exact_samples_without_windows(self):
         def mark(frame, token, n):
-            return f"KELVAROQ_MESH_BIND frame={frame} guest_token={token} mesh={n:016x} pixel={n + 1:016x}\n"
+            return f"VELKIN_MESH_BIND frame={frame} guest_token={token} mesh={n:016x} pixel={n + 1:016x}\n"
 
         def total(frame, draws, drawn, dispatches, dispatched):
-            return f"KELVAROQ_QUEUE_TOTAL frame={frame} draws={draws} drawn={drawn} dispatches={dispatches} dispatched={dispatched}\n"
+            return f"VELKIN_QUEUE_TOTAL frame={frame} draws={draws} drawn={drawn} dispatches={dispatches} dispatched={dispatched}\n"
 
         data = (
             bindings(500, 1)
             + mark(11, 500, 1)
             + total(11, 100, 80, 9, 8)
-            + "KELVAROQ_PRESENT frame=11\n"
-            + "KELVAROQ_PRESENT frame=12 interval_us=70\n"
-            + "KELVAROQ_PRESENT frame=13 interval_us=90\n"
+            + "VELKIN_PRESENT frame=11\n"
+            + "VELKIN_PRESENT frame=12 interval_us=70\n"
+            + "VELKIN_PRESENT frame=13 interval_us=90\n"
             + mark(14, 508, 3)
-            + "KELVAROQ_PRESENT frame=14 interval_us=20\n"
+            + "VELKIN_PRESENT frame=14 interval_us=20\n"
             + total(14, 113, 90, 14, 9)
         )
         with tempfile.TemporaryDirectory() as scratch:
@@ -61,9 +61,9 @@ class WorkloadTests(unittest.TestCase):
             self.assertEqual(
                 segment["queue_totals_source"], "cumulative_presentx_endpoints"
             )
-            for missing in ("", "KELVAROQ_PRESENT frame=13\n"):
+            for missing in ("", "VELKIN_PRESENT frame=13\n"):
                 filename.write_text(
-                    data.replace("KELVAROQ_PRESENT frame=13 interval_us=90\n", missing),
+                    data.replace("VELKIN_PRESENT frame=13 interval_us=90\n", missing),
                     encoding="utf8",
                 )
                 incomplete = workload.read_journal(filename)

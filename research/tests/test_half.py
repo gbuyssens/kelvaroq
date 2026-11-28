@@ -16,8 +16,8 @@ from unicorn import (
 )
 from unicorn import x86_const as x
 
-from kelvaroq_reference.memory import GuestFault
-from kelvaroq_reference.vector import VectorMoves
+from velkin_reference.memory import GuestFault
+from velkin_reference.vector import VectorMoves
 
 
 class HalfTests(unittest.TestCase):
@@ -32,11 +32,11 @@ class HalfTests(unittest.TestCase):
             Path(__file__).resolve().parents[2]
             / "target"
             / "release"
-            / "kelvaroq_simd.dll"
+            / "velkin_simd.dll"
         )
         env = patch.dict(
             os.environ,
-            {"KELVAROQ_SIMD_LIB": os.environ.get("KELVAROQ_SIMD_LIB", str(lib))},
+            {"VELKIN_SIMD_LIB": os.environ.get("VELKIN_SIMD_LIB", str(lib))},
         )
         env.start()
         self.addCleanup(env.stop)

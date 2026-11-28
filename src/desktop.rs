@@ -232,8 +232,8 @@ impl Desktop {
         unsafe {
             let module: HINSTANCE = GetModuleHandleW(None)?.into();
             let cursor = LoadCursorW(None, IDC_ARROW)?;
-            let render_class = w!("KelvaroqRender");
-            let log_class = w!("KelvaroqJournal");
+            let render_class = w!("VelkinRender");
+            let log_class = w!("VelkinJournal");
             let classes: [(PCWSTR, WNDPROC, HBRUSH); 2] = [
                 (
                     render_class,
@@ -274,7 +274,7 @@ impl Desktop {
             let render = Window(CreateWindowExW(
                 Default::default(),
                 render_class,
-                w!("Kelvaroq — Rendu"),
+                w!("Velkin — Rendu"),
                 WS_OVERLAPPEDWINDOW,
                 left,
                 top,
@@ -303,7 +303,7 @@ impl Desktop {
             let journal = Window(CreateWindowExW(
                 Default::default(),
                 log_class,
-                w!("Kelvaroq — Journal"),
+                w!("Velkin — Journal"),
                 WS_OVERLAPPEDWINDOW,
                 left + render_width,
                 top,
@@ -404,7 +404,7 @@ impl Desktop {
                             }
                             Event::Finished => {
                                 KillTimer(Some(self.render.0), LOG_TIMER)?;
-                                SetWindowTextW(self.render.0, w!("Kelvaroq — Émulation terminée"))?;
+                                SetWindowTextW(self.render.0, w!("Velkin — Émulation terminée"))?;
                             }
                         }
                     }

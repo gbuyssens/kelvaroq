@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Kelvaroq {
+namespace Velkin {
 internal sealed class Release {
     public string tag_name { get; set; }
     public string body { get; set; }
@@ -33,7 +33,7 @@ internal sealed class Release {
         var version = Number(tag_name);
         return version != null && version > new Version(installed);
     }
-    internal string Page { get { return "https://github.com/fablinoo/kelvaroq/releases/tag/" + tag_name; } }
+    internal string Page { get { return "https://github.com/gbuyssens/velkin/releases/tag/" + tag_name; } }
 }
 
 internal sealed class ReleaseCheck {
@@ -63,12 +63,12 @@ internal sealed class ReleaseCheck {
     }
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.ApplicationDirectory | DllImportSearchPath.System32)]
-    [DllImport("kelvaroq_simd.dll", ExactSpelling = true)]
-    static extern uint kelvaroq_latest_release([Out] byte[] buffer,uint length);
+    [DllImport("velkin_simd.dll", ExactSpelling = true)]
+    static extern uint velkin_latest_release([Out] byte[] buffer,uint length);
 
     internal static Release Fetch() {
         var data = new byte[512 * 1024];
-        int n = (int)kelvaroq_latest_release(data,(uint)data.Length);
+        int n = (int)velkin_latest_release(data,(uint)data.Length);
         return n == 0 ? null : Release.Parse(new UTF8Encoding(false,true).GetString(data,0,n));
     }
 }

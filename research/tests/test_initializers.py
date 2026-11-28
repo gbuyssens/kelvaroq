@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 from unicorn.x86_const import UC_X86_REG_RAX, UC_X86_REG_RSP, UC_X86_REG_YMM0
 
-from kelvaroq_reference.cpu import Startup
-from kelvaroq_reference.memory import QWORD
+from velkin_reference.cpu import Startup
+from velkin_reference.memory import QWORD
 
 
 class InitializerTests(unittest.TestCase):
@@ -72,6 +72,6 @@ class InitializerTests(unittest.TestCase):
         self.vm.cpu.mem_write(
             address, bytes.fromhex("b9 0c 00 00 00 31 c0 ff c0 e2 fc c3")
         )
-        with patch("kelvaroq_reference.cpu.INSTRUCTIONS_PER_SLICE", 4):
+        with patch("velkin_reference.cpu.INSTRUCTIONS_PER_SLICE", 4):
             self.assertTrue(self.vm.call(address, False), self.vm.blocker)
         self.assertEqual(self.vm.cpu.reg_read(UC_X86_REG_RAX), 12)

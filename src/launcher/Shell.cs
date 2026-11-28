@@ -19,7 +19,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
-namespace Kelvaroq {
+namespace Velkin {
 internal sealed class Shell : Window {
     readonly string home, history;
     readonly bool demo, experimental;
@@ -59,7 +59,7 @@ internal sealed class Shell : Window {
             mark.BeginInit(); mark.CacheOption = BitmapCacheOption.OnLoad; mark.StreamSource = stream; mark.EndInit(); mark.Freeze();
         }
         Icon = mark;
-        Title = "Kelvaroq"; Width = Math.Min(1000,SystemParameters.WorkArea.Width); Height = Math.Min(730,SystemParameters.WorkArea.Height);
+        Title = "Velkin"; Width = Math.Min(1000,SystemParameters.WorkArea.Width); Height = Math.Min(730,SystemParameters.WorkArea.Height);
         MinWidth = Math.Min(760,Width); MinHeight = Math.Min(500,Height);
         FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI"); FontSize = 14;
         UseLayoutRounding = true; WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -145,7 +145,7 @@ internal sealed class Shell : Window {
         var brand = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(22,28,10,32) };
         brand.Children.Add(new Border { Width = 25, Height = 25, Background = Accent, OpacityMask = new ImageBrush(mark),
             Margin = new Thickness(0,0,9,0), VerticalAlignment = VerticalAlignment.Center });
-        brand.Children.Add(Text("Kelvaroq",23,Ink,true));
+        brand.Children.Add(Text("Velkin",23,Ink,true));
         DockPanel.SetDock(brand,Dock.Top); rail.Children.Add(brand);
         var foot = Text((demo ? T("demo") + "   ·   " : "") + "v" + Product.Version,12,Muted);
         foot.Margin = new Thickness(24,12,16,18); DockPanel.SetDock(foot,Dock.Bottom); rail.Children.Add(foot);
@@ -218,6 +218,7 @@ internal sealed class Shell : Window {
         var options = Card("options");
         Row(options,T("monitor"),null,Text(T(prefs.monitor && Product.Enabled("VICTORY_LAUNCHER_MONITOR") ? "on" : "off"),14,Muted));
         Row(options,T("preload"),null,Text(T(prefs.preload && Product.PreloadAllowed ? "on" : "off"),14,Muted));
+        Row(options,T("discord"),null,Text(T(Presence.Active(prefs) ? "on" : "off"),14,Muted));
         if (hardware != null) Detected();
     }
 
@@ -254,7 +255,8 @@ internal sealed class Shell : Window {
             bool snapshots = Product.Enabled("VICTORY_SAVE_HISTORY") && Product.Enabled("VICTORY_SAVE_SNAPSHOTS");
             string error = "";
             ExitStatus = Session.Run(prefs,history,BuildId,snapshots,delegate {
-                using (var child = Process.Start(command)) {
+                using (var child = Process.Start(command))
+                using (Presence.Begin(prefs,game,locale)) {
                     error = child.StandardError.ReadToEnd(); child.WaitForExit(); return child.ExitCode;
                 }
             });
@@ -277,9 +279,39 @@ internal sealed class Shell : Window {
             check.Click += delegate { Guard(delegate { if (monitor) prefs.monitor = check.IsChecked == true; else prefs.preload = check.IsChecked == true; Persist(); }); };
             options.Children.Add(check);
         }
+        DiscordSettings();
         if (Product.Enabled("VICTORY_LAUNCHER_UPDATES")) UpdateControls(true);
         if (demo || Product.Enabled("VICTORY_LAUNCHER_I18N")) LanguageSettings();
         if (demo || Product.Enabled("VICTORY_SAVE_HISTORY")) { var retention = Card("retention"); Count(retention,true); Count(retention,false); }
+    }
+    void DiscordSettings() {
+        var card = Card("discord");
+        bool allowed = Presence.Allowed;
+        var show = new CheckBox { Content = T("discordToggle"), Foreground = Ink, IsChecked = prefs.discord && allowed, IsEnabled = allowed,
+            VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(0,5,0,5) };
+        var game = new CheckBox { Content = T("discordGame"), Foreground = Ink, IsChecked = prefs.discordGame, IsEnabled = allowed && prefs.discord,
+            VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(24,5,0,5) };
+        show.Click += delegate { Guard(delegate { prefs.discord = show.IsChecked == true; game.IsEnabled = prefs.discord; Persist(); }); };
+        game.Click += delegate { Guard(delegate { prefs.discordGame = game.IsChecked == true; Persist(); }); };
+        card.Children.Add(show); card.Children.Add(game);
+        var id = new TextBox { Width = 200, Text = prefs.discordAppId ?? "", IsEnabled = allowed, Padding = new Thickness(4,3,4,3),
+            Background = Panel, Foreground = Ink, BorderBrush = Edge, VerticalContentAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetName(id,T("discordAppId"));
+        Row(card,T("discordAppId"),T("discordAppIdHelp"),id);
+        var note = Text("",13,Muted); card.Children.Add(note);
+        Action explain = delegate {
+            string typed = id.Text.Trim();
+            bool bad = typed.Length > 0 && !Presence.ValidAppId(typed);
+            note.Foreground = bad ? B("#894419","#ffcd93") : Muted;
+            note.Text = bad ? T("discordBadId") : typed.Length == 0 && Presence.AppId(prefs) == null ? T("discordNoId") : "";
+        };
+        id.LostFocus += delegate { Guard(delegate {
+            string typed = id.Text.Trim();
+            if (typed.Length == 0 || Presence.ValidAppId(typed)) { prefs.discordAppId = typed.Length == 0 ? null : typed; Persist(); }
+            explain();
+        }); };
+        id.TextChanged += delegate { explain(); };
+        explain();
     }
     void ProfileSettings() {
         var card = Card("hardwareProfile");
@@ -328,7 +360,7 @@ internal sealed class Shell : Window {
     }
     async void StorageRow(StackPanel card,bool cache) {
         string path = cache ? prefs.cache : prefs.data;
-        string shown = demo ? (cache ? @"D:\Kelvaroq\cache" : @"D:\Kelvaroq\data") : path;
+        string shown = demo ? (cache ? @"D:\Velkin\cache" : @"D:\Velkin\data") : path;
         var size = Text("…",13,Muted); Row(card,T(cache ? "cache" : "data"),shown,size);
         var row = Actions(card);
         row.Children.Add(Button(T("move"),delegate { MoveStorage(cache); }));
@@ -346,7 +378,7 @@ internal sealed class Shell : Window {
         if (demo) return;
         using (var picker = new Forms.FolderBrowserDialog { Description = T("chooseDestination") }) {
             if (picker.ShowDialog() != Forms.DialogResult.OK) return;
-            string dest = Path.Combine(picker.SelectedPath,cache ? "Kelvaroq-cache" : "Kelvaroq-data");
+            string dest = Path.Combine(picker.SelectedPath,cache ? "Velkin-cache" : "Velkin-data");
             var original = prefs;
             var next = Files.Json.Deserialize<Preferences>(Files.Json.Serialize(prefs));
             if (cache) next.cache = dest; else next.data = dest;
@@ -398,7 +430,7 @@ internal sealed class Shell : Window {
         string file = item == null ? null : ((Snapshot)item.Tag).Path;
         string filter = T("zipFilter") + " (*.zip)|*.zip";
         if (key == "export") {
-            var save = new SaveFileDialog { Filter = filter, DefaultExt = ".zip", FileName = "Kelvaroq-" + DateTime.Today.ToString("yyyyMMdd") };
+            var save = new SaveFileDialog { Filter = filter, DefaultExt = ".zip", FileName = "Velkin-" + DateTime.Today.ToString("yyyyMMdd") };
             if (save.ShowDialog(this) != true) return;
             foreach (var path in new[]{prefs.data,prefs.cache,home}) Files.Separate(save.FileName,path);
             Work(() => Task.Run(() => Archives.Export(file,save.FileName)),T("busy"));
@@ -414,14 +446,14 @@ internal sealed class Shell : Window {
     }
     void About() {
         var info = Card("installation");
-        Row(info,T("productVersion"),Product.Version); Row(info,T("engineBuild"),BuildText(demo ? "f85101b6095e" : BuildId));
-        Row(info,T("patch"),demo ? "0064" : build.patches == null || build.patches.Length == 0 ? T("unknown") : build.patches.Last().name.Split('-')[0]);
+        Row(info,T("productVersion"),Product.Version); Row(info,T("engineBuild"),BuildText(demo ? "63b902fe1720" : BuildId));
+        Row(info,T("patch"),demo ? "0002" : build.patches == null || build.patches.Length == 0 ? T("unknown") : build.patches.Last().name.Split('-')[0]);
         Row(info,T("licence"),"GPL-3.0-or-later");
         var credits = Card("credits");
-        Row(credits,"Moon AI","https://realmoon.ai");
-        Row(credits,T("publisher"),"Stellarr Studio SAS");
+        Row(credits,T("publisher"),"Velkin contributors");
+        Row(credits,"Kelvaroq","Stellarr Studio SAS, GPL-3.0-or-later");
         Row(credits,"VIctory","GPL-3.0-or-later");
-        Row(credits,"victory-fork","GPL-3.0-or-later");
+        Row(credits,"VIctory-NVIDIA","GPL-3.0-or-later"); Row(credits,"victory-fork","GPL-3.0-or-later");
         if (Product.Enabled("VICTORY_LAUNCHER_UPDATES")) UpdateControls(false);
     }
     void UpdateControls(bool settings) {
@@ -472,7 +504,7 @@ internal sealed class Shell : Window {
     }
     List<Snapshot> Samples() {
         return Enumerable.Range(0,3).Select(n => new Snapshot { Info = new Manifest { created_at = new DateTime(2026,11,24,16-n,30,0,DateTimeKind.Utc).ToString("o"),
-            reason = n == 1 ? "beforeLaunch" : "afterExit", launcher_version = Product.Version, engine_build = "f85101b6095e",
+            reason = n == 1 ? "beforeLaunch" : "afterExit", launcher_version = Product.Version, engine_build = "63b902fe1720",
             files = new List<SavedFile> { new SavedFile { size = 87040 - n * 1024 } } } }).ToList();
     }
     internal void Capture(string directory) {

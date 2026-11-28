@@ -1,0 +1,41 @@
+diff --git a/crates/victory-shader/src/emit/lower.rs b/crates/victory-shader/src/emit/lower.rs
+index de6341291ca5fc8635a6cbc36a7acd3c844f2deb..a5267b0fad4f4025e8f43f9c98b7015eb5b94de0 100644
+--- a/crates/victory-shader/src/emit/lower.rs
++++ b/crates/victory-shader/src/emit/lower.rs
+@@ -1091,6 +1091,15 @@ fn own_bits_on() -> bool {
+     *ON.get_or_init(|| std::env::var_os("VICTORY_WAVE_OWN_BITS").is_none_or(|v| v != "0"))
+ }
+ 
++fn zero_mask_on() -> bool {
++    #[cfg(test)]
++    if let Some(on) = TEST_ZERO_MASK.get() {
++        return on;
++    }
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| std::env::var_os("VICTORY_WAVE_ZERO_MASK").is_some_and(|v| v == "1"))
++}
++
+ /// The refusal of a first half of an interpolation whose result is read
+ /// as data ([`Lower::interp`]).
+ pub(super) const FIRST_HALF: &str = "the first half of an interpolation";
+@@ -1121,6 +1130,8 @@ pub(super) fn host_max_wave() -> u32 {
+ 
+ #[cfg(test)]
+ thread_local! {
++    pub(super) static TEST_ZERO_MASK: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
++
+     /// A test's host wave size, for its thread only ([`set_host_max_wave`] is the process's).
+     pub(super) static TEST_HOST_WAVE: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+ }
+@@ -3202,6 +3213,11 @@ impl<'a> Lower<'a> {
+             None => (v, false),
+         };
+         let &m = self.x.st.masks.get(&lo).ok_or(LANE_MASK)?;
++        // No lane contributes a bit to an identically empty mask. Either dword
++        // is zero even when the other half of a console wave skips this block.
++        if m == Bool::FALSE && zero_mask_on() {
++            return Ok(self.s.m.i32(0));
++        }
+         // A mask that holds lanes outside EXEC where it is written (the complement of one,
+         // say) is the ballot of the lanes that are there: all of them, where two exchanging
+         // host waves know every lane runs that block, and in the paired form, whose host wave

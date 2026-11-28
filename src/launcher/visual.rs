@@ -36,7 +36,7 @@ static LANGUAGE: LazyLock<String> = LazyLock::new(|| {
     }
     let stored = || -> Option<String> {
         let path = std::path::PathBuf::from(std::env::var_os("APPDATA")?)
-            .join("Kelvaroq")
+            .join("Velkin")
             .join("settings");
         let raw = std::fs::read(path).ok()?;
         let value: serde_json::Value = serde_json::from_slice(&raw).ok()?;

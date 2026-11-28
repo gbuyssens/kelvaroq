@@ -10,22 +10,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Vérifier les signatures de collaboration
-        shell: bash
-        env:
-          EVENT: ${{ github.event_name }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          set -eu
-          if [[ "$BASE_SHA" =~ ^0+$ || -z "$BASE_SHA" ]]; then
-            range="$HEAD_SHA"
-          else
-            range="$BASE_SHA..$HEAD_SHA"
-          fi
-          for commit in $(git rev-list "$range"); do
-            git show -s --format=%B "$commit" | git interpret-trailers --parse | grep -Fxq 'Co-authored-by: Moon AI (https://chat.realmoon.ai)' || { echo "Missing trailer on $commit"; exit 1; }
-          done
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

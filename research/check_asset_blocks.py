@@ -175,6 +175,6 @@ def run(executable, cli):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
-    parser.add_argument("--cli", type=Path, default=Path("target/release/kelvaroq.exe"))
+    parser.add_argument("--cli", type=Path, default=Path("target/release/velkin.exe"))
     args = parser.parse_args()
     print(json.dumps(run(args.executable.resolve(), args.cli.resolve()), indent=2))

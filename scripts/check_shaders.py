@@ -156,7 +156,7 @@ def main():
     args = parser.parse_args()
     cache = PROJECT / "target" / "shader-reference"
     cache.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="kelvaroq-shaders-") as directory:
+    with tempfile.TemporaryDirectory(prefix="velkin-shaders-") as directory:
         checkout = extract_reference(cache, Path(directory), args.source)
         binary = build(checkout, cache)
         check(binary, checkout, args.adapter)

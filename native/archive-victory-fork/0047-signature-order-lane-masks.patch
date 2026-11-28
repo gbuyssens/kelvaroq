@@ -1,0 +1,439 @@
+diff --git a/crates/victory-gpu/src/device.rs b/crates/victory-gpu/src/device.rs
+index a69e4c29ab3c8bb995203d7deee0df59b5a0f736..ad97ce19feb3e34346745c235774d93413b845ea 100644
+--- a/crates/victory-gpu/src/device.rs
++++ b/crates/victory-gpu/src/device.rs
+@@ -367,8 +367,8 @@ extern "system" fn unknown_pipeline<const SLOT: usize>(
+     out: *mut This,
+ ) -> HRESULT {
+     use std::sync::atomic::{AtomicU32, Ordering};
+-    static CALLS: [AtomicU32; 2] = [const { AtomicU32::new(0) }; 2];
+-    let calls = CALLS[usize::from(SLOT == 0x218)].fetch_add(1, Ordering::Relaxed) + 1;
++    static CALLS: AtomicU32 = AtomicU32::new(0);
++    let calls = CALLS.fetch_add(1, Ordering::Relaxed) + 1;
+     if !out.is_null() {
+         // SAFETY: the title's out pointer (a local of its own).
+         unsafe { *out = std::ptr::null() };
+@@ -393,7 +393,7 @@ extern "system" fn unknown_pipeline<const SLOT: usize>(
+             .as_ref()
+             .and_then(|w| words(w[0] as usize));
+         tracing::warn!(
+-            slot = format_args!("{:#x}", SLOT),
++            slot = "0x1c8",
+             calls,
+             description = format_args!("{description:x?}"),
+             first_points_at = format_args!("{first:x?}"),
+@@ -514,7 +514,7 @@ static FUNCTIONS: Table<160> = {
+     f[57] = unknown_pipeline::<0x1c8> as *const (); // 0x1c8
+     f[61] = descriptor::create_sampler_x as *const (); // 0x1e8
+     f[62] = pipeline::create_compute_x as *const (); // 0x1f0
+-    f[67] = unknown_pipeline::<0x218> as *const (); // 0x218
++    f[67] = pipeline::cached_compute as *const (); // 0x218
+     f[69] = object::ignore as *const (); // 0x228 debug error filter
+     f[70] = descriptor::create_placed_srv as *const (); // 0x230
+     f[71] = descriptor::create_placed_uav as *const (); // 0x238
+diff --git a/crates/victory-gpu/src/pipeline.rs b/crates/victory-gpu/src/pipeline.rs
+index 96e8e0cc424499267d964793250ec6670c301047..1464610e1f445fb59428987c1173aec63afcb072 100644
+--- a/crates/victory-gpu/src/pipeline.rs
++++ b/crates/victory-gpu/src/pipeline.rs
+@@ -722,6 +722,29 @@ pub(crate) extern "system" fn create_compute_x(
+     create_compute(this, desc, iid, out)
+ }
+ 
++/// Slot 0x218 tries a precompiled compute pipeline. The caller looks up
++/// a cache entry by key, fills in its root signature and passes the four
++/// address and length pairs after it. The first pair holds only 28 bytes.
++/// On a miss the caller retries at 0x1f0 with its full shader container.
++pub(crate) extern "system" fn cached_compute(
++    _: This,
++    _desc: *const u8,
++    _iid: *const Iid,
++    out: *mut This,
++) -> HRESULT {
++    use std::sync::atomic::{AtomicU64, Ordering};
++    static MISSES: AtomicU64 = AtomicU64::new(0);
++    if !out.is_null() {
++        // SAFETY: the caller supplies the pipeline out pointer.
++        unsafe { out.write(std::ptr::null()) };
++    }
++    let misses = MISSES.fetch_add(1, Ordering::Relaxed) + 1;
++    if misses.is_power_of_two() {
++        tracing::info!(misses, "precompiled compute cache miss at 0x218; the caller can retry with its shader at 0x1f0");
++    }
++    object::E_NOTIMPL
++}
++
+ /// A pipeline described as a stream: its size and the subobjects, each a
+ /// type then its data, padded to 8 bytes.
+ #[repr(C)]
+@@ -902,6 +925,124 @@ mod tests {
+             .collect()
+     }
+ 
++    /// Exercises the title's dispatch and indirect dispatch with a small
++    /// pretranslated shader. The clamp installs its own compute signature
++    /// before the indirect dispatch must restore the title's arguments.
++    #[cfg(windows)]
++    #[test]
++    fn repeated_root_bindings_reach_direct_and_indirect_dispatches() {
++        use victory_shader::emit::{HostShader, UserData};
++        use victory_shader::{HwStage, RootType};
++        use windows::core::s;
++        use windows_sys::Win32::System::Memory::{
++            MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc, VirtualFree,
++        };
++
++        let Some(device) = crate::host::host() else { return };
++        let cs = r#"
++            cbuffer Args : register(b0, space0) { uint at; uint addend; };
++            RWByteAddressBuffer output : register(u1, space1);
++            [numthreads(1, 1, 1)]
++            void main() { uint before; output.InterlockedAdd(at, addend, before); }
++        "#;
++        let dxil = crate::host::compile(cs, s!("main"), s!("cs_5_1")).expect("compute shader");
++        let host_shader = HostShader {
++            stage: HwStage::Cs, dxil,
++            user_data: (0..2).map(|i| UserData { index: i, slot: 0, root: RootType::Constants, dword: i }).collect(),
++            root_uavs: vec![1], root_cbvs: vec![], root_srvs: vec![],
++            root_indexed_views: vec![], samplers: vec![], static_samplers: vec![],
++        };
++        let shader = Arc::new(Shader {
++            hash: "root binding test".into(), stage: "compute", container: Vec::new(),
++            translated: OnceLock::from(Some(Translated { host: host_shader, used: vec![], stores: true })),
++        });
++        let mut pipe = std::ptr::null();
++        assert_eq!(hand_out(vec![shader], None, &PIPELINE_IIDS[0], &mut pipe), S_OK);
++        assert!(make::now(&pipeline(pipe).host), "translated compute pipeline");
++
++        // The console heap description, then the two zero placement fields.
++        #[repr(C)]
++        struct HeapPacket([u32; 4], [u64; 2]);
++        let packet = HeapPacket([0, 64, 1, 1], [0; 2]);
++        let mut heap = std::ptr::null();
++        assert_eq!(crate::descriptor::create_heap(
++            std::ptr::null(), std::ptr::from_ref(&packet).cast(), &PAGEABLE_IIDS[0], &mut heap,
++        ), S_OK);
++
++        const PAGE: usize = crate::watch::PAGE;
++        const MEM_WRITE_WATCH: u32 = 0x0020_0000;
++        // Separate registered buffers for UAV output and indirect input.
++        // SAFETY: a fresh, write-watched allocation, held through completion.
++        let mem = unsafe { VirtualAlloc(std::ptr::null(), 2 * PAGE, MEM_RESERVE | MEM_COMMIT | MEM_WRITE_WATCH, PAGE_READWRITE) };
++        assert!(!mem.is_null());
++        let out = mem as u64;
++        let args = out + PAGE as u64;
++        unsafe { (args as *mut [u32; 3]).write([1, 1, 1]) };
++        for start in [out, args] {
++            crate::shadow::register(start as usize, start, PAGE as u64);
++        }
++
++        let list = device.new_list().unwrap();
++        let mut state = crate::draw::State::default();
++        state.set_pipeline(pipe);
++        state.set_heaps(&[heap]);
++        state.set_view(true, 1, out);
++        state.set_constants(true, 0, &[0, 7], 0);
++        state.dispatch(&list, 1, 1, 1);
++        state.dispatch(&list, 1, 1, 1);  // same constants and table
++        state.set_constants(true, 0, &[4, 3], 0);
++        state.dispatch(&list, 1, 1, 1);
++        assert!(state.execute_indirect(&list, (2, 12, 1), args, None));
++        state.dispatch(&list, 1, 1, 1);  // after the foreign clamp and indirect call
++        state.set_view(true, 1, out + 64);  // same constants, different host table
++        state.dispatch(&list, 1, 1, 1);
++        list.close();
++        device.execute(&[&list]);
++
++        // SAFETY: execute waited for the GPU and copied its declared writes back.
++        let words = unsafe { std::slice::from_raw_parts(mem.cast::<u32>(), 18) };
++        let mut expected = [0u32; 18];
++        expected[0] = 14;
++        expected[1] = 9;
++        expected[17] = 3;
++        assert_eq!(words, expected);
++        eprintln!("direct/indirect root-binding readback: {}, {}, {}", words[0], words[1], words[17]);
++        drop(state);
++        drop(list);
++        for start in [out, args] {
++            crate::shadow::unregister(start as usize, start);
++        }
++        slot::<extern "system" fn(This) -> u32>(heap, 0x10)(heap);
++        slot::<extern "system" fn(This) -> u32>(pipe, 0x10)(pipe);
++        unsafe { VirtualFree(mem, 0, MEM_RELEASE) };
++    }
++
++    /// A miss in the precompiled cache leaves the caller free to supply
++    /// its compute shader through the other device method.
++    #[test]
++    fn cached_compute_miss_falls_back_to_the_compute_container() {
++        use crate::object::slot;
++        type Cached = extern "system" fn(This, *const u8, *const Iid, *mut This) -> HRESULT;
++        type Compute = extern "system" fn(This, *const ComputeHead, u32, *const u8, *const Iid, *mut This) -> HRESULT;
++        let device = crate::device::device();
++        let pair_data = [0u32; 7];
++        let mut entry = [0usize; 9];
++        for pair in entry[1..].chunks_exact_mut(2) {
++            pair.copy_from_slice(&[pair_data.as_ptr() as usize, size_of_val(&pair_data)]);
++        }
++        let mut p = device;
++        assert!(slot::<Cached>(device, 0x218)(device, entry.as_ptr().cast(), &PIPELINE_IIDS[0], &mut p) < 0);
++        assert!(p.is_null());
++        let code = [1u8, 2, 3, 4];
++        let desc = ComputeHead {
++            root: std::ptr::null(),
++            stage: Bytecode { code: code.as_ptr(), size: code.len() },
++        };
++        assert_eq!(slot::<Compute>(device, 0x1f0)(device, &desc, 0, std::ptr::null(), &PIPELINE_IIDS[0], &mut p), S_OK);
++        assert_eq!(shaders(p), [("compute", code.to_vec())]);
++        slot::<extern "system" fn(This) -> u32>(p, 0x10)(p);
++    }
++
+     #[test]
+     fn pipelines_keep_their_shaders() {
+         let (vs, ps) = ([1u8, 2, 3], [4u8; 5]);
+diff --git a/crates/victory-gpu/src/pipeline/host.rs b/crates/victory-gpu/src/pipeline/host.rs
+index f943bc32d5c3018ba571bc5f5fe9801d42b533df..6e8994f8c4510dcfc431b773778528faba4b5be6 100644
+--- a/crates/victory-gpu/src/pipeline/host.rs
++++ b/crates/victory-gpu/src/pipeline/host.rs
+@@ -611,6 +611,34 @@ fn refuse(reason: &'static str, shaders: &[Arc<Shader>]) -> Option<HostPipeline>
+     None
+ }
+ 
++/// The lane bounds in the translated shader's pipeline validation data.
++/// Valid DXIL can still require a wave wider than the device supports.
++fn wave_lanes(dxil: &[u8]) -> Option<[u32; 2]> {
++    let container = victory_shader::Container::parse(dxil).ok()?;
++    let psv = container.part(victory_shader::FourCC::PSV0)?.data;
++    let size = u32::from_le_bytes(psv.get(..4)?.try_into().ok()?) as usize;
++    let info = psv.get(4..)?.get(..size)?;
++    Some([
++        u32::from_le_bytes(info.get(16..20)?.try_into().ok()?),
++        u32::from_le_bytes(info.get(20..24)?.try_into().ok()?),
++    ])
++}
++
++/// The cache stores translated code under a build-dependent key. Record
++/// its content hash beside the original shader's so the refused stages
++/// can be identified in a saved cache without capturing the originals.
++fn log_refused_stage(shader: &Shader) {
++    if let Some(t) = shader.translated() {
++        let dxil = &t.host.dxil;
++        tracing::warn!(
++            ?shader,
++            host_dxil = %blake3::hash(dxil),
++            wave_lanes = ?wave_lanes(dxil),
++            "translated stage of a refused pipeline"
++        );
++    }
++}
++
+ impl HostPipeline {
+     /// A host pipeline for vertex and pixel shaders with the graphics
+     /// state `g`, or for one compute shader.
+@@ -831,6 +859,7 @@ impl HostPipeline {
+                 Ok(pso) => pso,
+                 Err(e) => {
+                     tracing::warn!(error = %e, ?shaders, "host pipeline refused");
++                    log_refused_stage(stages[0].0);
+                     host.log_messages();
+                     return None;
+                 }
+@@ -893,7 +922,10 @@ impl HostPipeline {
+                 mesh_pipeline(&host.device, &root, amplification, code(0), code(1), &mesh_state, depth_bounds, &name)
+             };
+             let refused = |e: windows::core::Error| {
+-                tracing::warn!(error = %e, ?shaders, "host mesh pipeline refused");
++                tracing::warn!(error = %e, ?shaders, %state, "host mesh pipeline refused");
++                for (shader, _) in &stages {
++                    log_refused_stage(shader);
++                }
+                 host.log_messages();
+             };
+             let (pso, launch) = match launch_roots {
+@@ -1374,6 +1406,47 @@ mod tests {
+         }
+     }
+ 
++    /// A fixed wave size is enforced when the pipeline is created. The
++    /// same empty compute shader and root signature can be used for both
++    /// widths, so this isolates the device limit from resource bindings.
++    #[test]
++    fn compute_pipeline_enforces_the_devices_wave_width() {
++        let (Some(host), Some(dxc)) = (host(), dxc()) else { return };
++        let mut caps = D3D12_FEATURE_DATA_D3D12_OPTIONS1::default();
++        let mut model = D3D12_FEATURE_DATA_SHADER_MODEL { HighestShaderModel: D3D_SHADER_MODEL_6_6 };
++        // SAFETY: each structure and size match the requested feature.
++        let available = unsafe {
++            host.device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1,
++                (&raw mut caps).cast(), size_of_val(&caps) as u32).is_ok()
++                && host.device.CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL,
++                    (&raw mut model).cast(), size_of_val(&model) as u32).is_ok()
++        };
++        if !available || model.HighestShaderModel.0 < D3D_SHADER_MODEL_6_6.0
++            || !caps.WaveOps.as_bool() || caps.WaveLaneCountMax != 32 {
++            return;
++        }
++        let (root, _) = root_signature(&host.device, &[], &[], true).unwrap();
++        let dir = tempfile::tempdir().unwrap();
++        for width in [32, 64] {
++            let src = format!("[WaveSize({width})] [numthreads(64,1,1)] void main() {{}}");
++            let dxil = compile(&dxc, dir.path(), &src, "cs_6_6");
++            assert_eq!(wave_lanes(&dxil), Some([width, width]));
++            let desc = D3D12_COMPUTE_PIPELINE_STATE_DESC {
++                // SAFETY: the description borrows the live root signature.
++                pRootSignature: unsafe { std::mem::transmute_copy(&root) },
++                CS: code(&dxil),
++                ..Default::default()
++            };
++            // SAFETY: the root signature and shader live through creation.
++            let made = unsafe { host.device.CreateComputePipelineState::<ID3D12PipelineState>(&desc) };
++            if width == 32 {
++                made.unwrap();
++            } else {
++                assert_eq!(made.unwrap_err().code(), windows::Win32::Foundation::E_INVALIDARG);
++            }
++        }
++    }
++
+     /// A mesh pipeline made once is loaded from the library the next time,
+     /// not compiled again (a stream without a topology never loads).
+     /// Blending goes off for integer targets only, and a state without
+diff --git a/crates/victory-shader/src/emit/container.rs b/crates/victory-shader/src/emit/container.rs
+index 9e4e1d1e3b09d3fb2a51524fa5dd8a06f5e231dc..2a46ea3ef780838ecc1b19425f30be2dc082a609 100644
+--- a/crates/victory-shader/src/emit/container.rs
++++ b/crates/victory-shader/src/emit/container.rs
+@@ -90,7 +90,9 @@ pub(crate) fn signature(elements: &[SigElement], input: bool) -> Vec<u8> {
+         }
+     }
+     let mut order: Vec<usize> = (0..elements.len()).collect();
+-    order.sort_by_key(|&i| (elements[i].row.unwrap_or(u32::MAX), elements[i].col));
++    // For elements packed in one register the validator compares the
++    // offsets of their semantic names. Channel order can be different.
++    order.sort_by_key(|&i| (elements[i].row.unwrap_or(u32::MAX), offsets[i]));
+     for i in order {
+         let (e, offset) = (&elements[i], offsets[i]);
+         let used = e.usage << e.col;
+@@ -403,6 +405,30 @@ fn md5_block(state: &mut [u32; 4], block: &[u8; 64]) {
+ mod tests {
+     use super::*;
+ 
++    /// Two elements share a register, with the high channels declared
++    /// first. Both signatures must keep their semantic offsets in order.
++    #[test]
++    fn packed_signature_rows_follow_their_name_offsets() {
++        let element = |name: &str, col| SigElement {
++            name: name.to_owned(),
++            index: 0,
++            kind: 0,
++            comp: 9,
++            interp: 2,
++            row: Some(0),
++            col,
++            cols: 2,
++            usage: 3,
++            half: false,
++        };
++        let elements = [element("COLOR", 2), element("TEXCOORD", 0)];
++        for input in [false, true] {
++            let bytes = signature(&elements, input);
++            assert_eq!(bytes[8 + 24], 0b1100);
++            assert_eq!(bytes[8 + 32 + 24], 0b0011);
++        }
++    }
++
+     #[test]
+     fn md5_core_matches_the_standard() {
+         // Standard MD5 of "abc" with standard padding, through md5_block.
+diff --git a/crates/victory-shader/src/emit/lower.rs b/crates/victory-shader/src/emit/lower.rs
+index a5267b0fad4f4025e8f43f9c98b7015eb5b94de0..487fc7660a257218dc438ec1d2916704321d7736 100644
+--- a/crates/victory-shader/src/emit/lower.rs
++++ b/crates/victory-shader/src/emit/lower.rs
+@@ -1091,13 +1091,15 @@ fn own_bits_on() -> bool {
+     *ON.get_or_init(|| std::env::var_os("VICTORY_WAVE_OWN_BITS").is_none_or(|v| v != "0"))
+ }
+ 
++/// An identically empty mask has zero in both halves even inside a lane
++/// branch. Set `VICTORY_WAVE_ZERO_MASK=0` to exercise the ballot path.
+ fn zero_mask_on() -> bool {
+     #[cfg(test)]
+     if let Some(on) = TEST_ZERO_MASK.get() {
+         return on;
+     }
+     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+-    *ON.get_or_init(|| std::env::var_os("VICTORY_WAVE_ZERO_MASK").is_some_and(|v| v == "1"))
++    *ON.get_or_init(|| std::env::var_os("VICTORY_WAVE_ZERO_MASK").is_none_or(|v| v != "0"))
+ }
+ 
+ /// The refusal of a first half of an interpolation whose result is read
+@@ -3205,13 +3207,45 @@ impl<'a> Lower<'a> {
+         Ok(())
+     }
+ 
++    /// A scalar copy preserves both dwords even when some lanes skip the
++    /// copy. If its source was written in the entry block, both host waves
++    /// can ballot it there before the branch.
++    fn entry_mask_copied_by(&self, block: usize, lo: Value) -> Option<Value> {
++        let inst = self.x.p.blocks[block]
++            .insts
++            .iter()
++            .find(|i| i.writes.iter().any(|w| w.1 == lo))?;
++        let Fields::Sop { src, .. } = &inst.fields else { return None };
++        let operand = match (inst.name(), src.as_slice()) {
++            ("s_mov_b64", [a]) => a,
++            ("s_and_b64" | "s_or_b64", [a, b]) if a == b => a,
++            _ => return None,
++        };
++        let Operand::Scalar { code, .. } = *operand else { return None };
++        let source = inst.read(Reg::S(code))?;
++        let high = inst.read(Reg::S(code.checked_add(1)?))?;
++        (self.x.p.blocks[0].preds.is_empty()
++            && self.def_block.get(&source) == Some(&0)
++            && self.x.st.highs.get(&high) == Some(&source)
++            && self.x.st.active.contains(&source))
++            .then_some(source)
++    }
++
+     /// A dword of a lane mask as a number: the ballot of the lanes' bits,
+     /// taken in the block that writes the mask (see [`MaskData`]).
+     fn mask_dword(&mut self, v: Value) -> Result<V, Why> {
+-        let (lo, high) = match self.x.st.highs.get(&v) {
++        let (mut lo, high) = match self.x.st.highs.get(&v) {
+             Some(&lo) => (lo, true),
+             None => (v, false),
+         };
++        if !self.local
++            && self.exchange.as_ref().is_some_and(|e| !e.1)
++            && let Some(&block) = self.def_block.get(&lo)
++            && !self.all_lanes(block)
++            && let Some(source) = self.entry_mask_copied_by(block, lo)
++        {
++            lo = source;
++        }
+         let &m = self.x.st.masks.get(&lo).ok_or(LANE_MASK)?;
+         // No lane contributes a bit to an identically empty mask. Either dword
+         // is zero even when the other half of a console wave skips this block.
+diff --git a/crates/victory-shader/src/emit/mod.rs b/crates/victory-shader/src/emit/mod.rs
+index f9d2f53240412610ff870c9a7faf8513340b7ca2..48ba0d93d4c37e430c5779d054b15d629db6baf8 100644
+--- a/crates/victory-shader/src/emit/mod.rs
++++ b/crates/victory-shader/src/emit/mod.rs
+@@ -370,7 +370,20 @@ fn translate_plain(container: &[u8]) -> Result<HostShader, ShaderError> {
+     let res = resource::track(&p, &native.layout, native.stage, st.as_ref().ok())?;
+     let io = io::raise(&p, &native)?;
+     let st = st?;
+-    emit(&c, &native, &p, &st, &io, &res)
++    let result = emit(&c, &native, &p, &st, &io, &res);
++    // Failed translations have no cache entry. The consuming instruction
++    // and group shape let a run distinguish a scalar mask read from a
++    // branch on its condition code without saving the program.
++    #[cfg(feature = "diagnostics")]
++    if let Err(ShaderError::Unsupported { offset, what }) = &result
++        && lower::needs_every_lane(what)
++        && let crate::native::StageIo::Cs(cs) = &native.io
++        && let Some(inst) = p.blocks.iter().flat_map(|b| &b.insts).find(|i| i.machine.offset == *offset)
++    {
++        eprintln!("compute wave operation at {offset:#x}: {}, group {:?}, wave64={}, {what}",
++            inst.name(), cs.threads, native.wave64);
++    }
++    result
+ }
+ 
+ thread_local! {

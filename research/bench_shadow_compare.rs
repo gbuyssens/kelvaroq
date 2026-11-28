@@ -6,7 +6,7 @@ use std::time::Instant;
 mod baseline {
     include!(env!("SHADOW_REFERENCE"));
 }
-#[path = "../native/kelvaroq-render/src/shadow_bytes.rs"]
+#[path = "../native/velkin-render/src/shadow_bytes.rs"]
 mod current;
 
 type Bounds = fn(&[u8], &[u8]) -> Option<(usize, usize)>;

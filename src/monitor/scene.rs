@@ -139,7 +139,7 @@ impl Scene {
             self.target.BeginDraw();
             self.target.Clear(Some(&color(palette(BG), 1.)));
         }
-        self.label("Kelvaroq", 28., 17., 104., 2, MINT);
+        self.label("Velkin", 28., 17., 104., 2, MINT);
         self.fill(133., 21., 1., 21., 0x455864);
         self.label(t("monitor"), 149., 17., 445., 2, WHITE);
         self.label(&feed.status, 29., 48., 620., 0, MUTED);
@@ -363,7 +363,7 @@ impl Scene {
             .iter()
             .filter_map(|(k, t)| h.latest(k).filter(|v| *v > 0).map(|v| (v, *t)))
             .collect();
-        drops.sort_by(|a, b| b.0.cmp(&a.0));
+        drops.sort_by_key(|a| std::cmp::Reverse(a.0));
         let reasons = drops
             .iter()
             .take(2)

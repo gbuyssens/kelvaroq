@@ -12,8 +12,8 @@ from scripts.build_native import (
     archive_source,
     checkout_source,
     git,
-    publish,
     install_render_source,
+    publish,
     sha256,
 )
 
@@ -56,6 +56,13 @@ class BuildNativeTests(unittest.TestCase):
             f"diff --git a/sample b/sample\n--- a/sample\n+++ b/sample\n@@ -1 +1 @@\n-{before}\n+{after}\n".encode()
         )
 
+    def make_lock_patch(self):
+        # A patch that makes the engine depend on the render crate.
+        (self.patches / "0000-render.patch").write_bytes(
+            b"diff --git a/Cargo.lock b/Cargo.lock\nnew file mode 100644\n--- /dev/null\n+++ b/Cargo.lock\n"
+            b'@@ -0,0 +1,3 @@\n+[[package]]\n+name = "velkin-render"\n+version = "0.1.0"\n'
+        )
+
     def checkout(self, name):
         folder = self.root / name
         folder.mkdir()
@@ -63,8 +70,20 @@ class BuildNativeTests(unittest.TestCase):
             folder, str(self.source), self.revision, self.patches, self.crate
         )
 
+    def test_unused_render_crate_is_not_installed(self):
+        # The engine's workspace takes every crate under crates/: a copy that
+        # no patch depends on would change the lock and fail the build.
+        folder, (tree, epoch, _) = self.checkout("plain")
+        output = self.root / "plain.zip"
+        archive_source(folder, tree, epoch, output)
+        with zipfile.ZipFile(output) as contents:
+            names = {p.filename for p in contents.infolist() if not p.is_dir()}
+        self.assertEqual(names, {"velkin-engine/sample"})
+
     def test_source_and_cache_key_cover_patches_and_overlay(self):
         self.make_patch("0002-finish.diff", "two", "three")
+        self.make_lock_patch()
+        (self.crate / "Cargo.toml").write_bytes(b'[package]\nversion = "0.1.0"\n')
         self.make_patch("0001-start.patch", "one", "two")
         # The source clone's local working copy must not leak into the build.
         (self.source / "sample").write_bytes(b"personal edit\n")
@@ -73,7 +92,8 @@ class BuildNativeTests(unittest.TestCase):
         for i in range(2):
             folder, (tree, epoch, patches) = self.checkout(f"work{i}")
             self.assertEqual(
-                [p["name"] for p in patches], ["0001-start.patch", "0002-finish.diff"]
+                [p["name"] for p in patches],
+                ["0000-render.patch", "0001-start.patch", "0002-finish.diff"],
             )
             output = self.root / f"source{i}.zip"
             archive_source(folder, tree, epoch, output)
@@ -82,14 +102,15 @@ class BuildNativeTests(unittest.TestCase):
                 self.assertEqual(
                     names,
                     {
-                        "kelvaroq-engine/sample",
-                        "kelvaroq-engine/crates/kelvaroq-render/Cargo.toml",
-                        "kelvaroq-engine/crates/kelvaroq-render/src/lib.rs",
+                        "velkin-engine/sample",
+                        "velkin-engine/Cargo.lock",
+                        "velkin-engine/crates/velkin-render/Cargo.toml",
+                        "velkin-engine/crates/velkin-render/src/lib.rs",
                     },
                 )
-                self.assertEqual(contents.read("kelvaroq-engine/sample"), b"three\n")
+                self.assertEqual(contents.read("velkin-engine/sample"), b"three\n")
                 self.assertEqual(
-                    contents.read("kelvaroq-engine/crates/kelvaroq-render/src/lib.rs"),
+                    contents.read("velkin-engine/crates/velkin-render/src/lib.rs"),
                     (self.crate / "src/lib.rs").read_bytes(),
                 )
             if previous:
@@ -101,7 +122,7 @@ class BuildNativeTests(unittest.TestCase):
         self.assertEqual((self.source / "sample").read_bytes(), b"personal edit\n")
 
     def test_source_archive_locks_the_bundled_render_version(self):
-        lock = b'[[package]]\nname = "kelvaroq-render"\nversion = "0.1.0"\n'
+        lock = b'[[package]]\nname = "velkin-render"\nversion = "0.1.0"\n'
         other = b'\n[[package]]\nname = "other"\nversion = "0.1.0"\n'
         (self.source / "Cargo.lock").write_bytes(lock + other)
         (self.crate / "Cargo.toml").write_bytes(b'[package]\nversion = "0.2.0"\n')

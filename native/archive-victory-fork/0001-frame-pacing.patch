@@ -1,0 +1,39 @@
+diff --git a/crates/victory-gpu/src/frame.rs b/crates/victory-gpu/src/frame.rs
+index 468812c59277097bf1b5159717dfdc061e5eb024..6035dcb810d5c91ae12545dafaf24edc6ff5ee4b 100644
+--- a/crates/victory-gpu/src/frame.rs
++++ b/crates/victory-gpu/src/frame.rs
+@@ -142,6 +142,8 @@ pub(crate) extern "system" fn wait(
+         tick -= 1;
+         wait = Duration::ZERO;
+     }
++    #[cfg(windows)]
++    let timing = velkin_render::pacing::start();
+     let hr = if wait > limit {
+         std::thread::sleep(limit);
+         TIMEOUT
+@@ -155,6 +157,9 @@ pub(crate) extern "system" fn wait(
+         let us = wait.min(limit).as_micros() as u64;
+         crate::framelog::add(crate::framelog::T::PaceUs, us);
+         crate::framelog::here(crate::framelog::H::PaceUs, us);
++        if let Some(start) = timing {
++            velkin_render::pacing::wait(wait.min(limit), start.elapsed());
++        }
+     }
+     #[cfg(all(windows, feature = "diagnostics"))]
+     {
+diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
+index 78f0e7db4ba67dbfca62b25404322ac1e2438484..9838d41a95e28ad46062f68c80e26f2d34ffd241 100644
+--- a/crates/victory-gpu/src/host.rs
++++ b/crates/victory-gpu/src/host.rs
+@@ -11229,7 +11229,11 @@ impl Host {
+             // What Present answers was thrown away: a removal it is the
+             // first to report then looked as if the next call found it.
+             // Said once (a status that is no error, as "occluded", is not).
++            let timing = velkin_render::pacing::start();
+             let shown = p.swap_chain.Present(0, DXGI_PRESENT(0));
++            if let Some(start) = timing {
++                velkin_render::pacing::present(frame, start, std::time::Instant::now(), shown.0);
++            }
+             if shown.is_err() {
+                 static ONCE: std::sync::Once = std::sync::Once::new();
+                 ONCE.call_once(|| {

@@ -1,0 +1,123 @@
+diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
+index 9838d41a95e28ad46062f68c80e26f2d34ffd241..71101ac7c961b75c999ece821d84518b2fd7ec18 100644
+--- a/crates/victory-gpu/src/host.rs
++++ b/crates/victory-gpu/src/host.rs
+@@ -11229,7 +11229,7 @@ impl Host {
+             // What Present answers was thrown away: a removal it is the
+             // first to report then looked as if the next call found it.
+             // Said once (a status that is no error, as "occluded", is not).
+-            let timing = velkin_render::pacing::start();
++            let timing = velkin_render::pacing::start_present();
+             let shown = p.swap_chain.Present(0, DXGI_PRESENT(0));
+             if let Some(start) = timing {
+                 velkin_render::pacing::present(frame, start, std::time::Instant::now(), shown.0);
+diff --git a/crates/victory-gpu/src/list.rs b/crates/victory-gpu/src/list.rs
+index 8b3cde7e2191aec0d40f27a08731b6f680aabc24..cb4a003812cf756f9a8f55e5c09a75bf4eed70fa 100644
+--- a/crates/victory-gpu/src/list.rs
++++ b/crates/victory-gpu/src/list.rs
+@@ -1856,6 +1856,13 @@ extern "system" fn dispatch(_: This) {
+ static DRAWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+ static DISPATCHES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+ 
++/// Pending counts from recording threads, without draining the upstream checkpoint.
++#[cfg(windows)]
++pub(crate) fn counts() -> (u64, u64) {
++    use std::sync::atomic::Ordering::Relaxed;
++    (DRAWS.load(Relaxed), DISPATCHES.load(Relaxed))
++}
++
+ /// Draws (any kind, mesh and indirect included) and compute dispatches
+ /// recorded since the last call.
+ pub(crate) fn take_counts() -> (u64, u64) {
+diff --git a/crates/victory-gpu/src/pipeline.rs b/crates/victory-gpu/src/pipeline.rs
+index ed4ebba1f9d0f857aabbcafed31868df29c24893..96e8e0cc424499267d964793250ec6670c301047 100644
+--- a/crates/victory-gpu/src/pipeline.rs
++++ b/crates/victory-gpu/src/pipeline.rs
+@@ -483,6 +483,18 @@ pub(crate) fn bound(this: This) {
+         return;
+     }
+     let frame = crate::frame::current();
++    #[cfg(windows)]
++    if velkin_render::pacing::workload_enabled()
++        && let Some(mesh) = p.shaders.iter().find(|s| s.stage == "mesh")
++        && let Some(pixel) = p.shaders.iter().find(|s| s.stage == "pixel")
++    {
++        velkin_render::pacing::workload_bind(
++            crate::queue::presented(),
++            frame,
++            &mesh.hash,
++            &pixel.hash,
++        );
++    }
+     for shader in &p.shaders {
+         tracing::info!(pipeline = ?this, frame, stage = shader.stage, size = shader.container.len(), hash = %shader.hash, "first bind");
+     }
+diff --git a/crates/victory-gpu/src/queue.rs b/crates/victory-gpu/src/queue.rs
+index eda79e5cf2c2b421604621e68e9ffb2d3d6f7586..176697b93d8e7b424a7089532003743b94154487 100644
+--- a/crates/victory-gpu/src/queue.rs
++++ b/crates/victory-gpu/src/queue.rs
+@@ -1287,11 +1287,44 @@ fn system_timestamp() -> u64 {
+ /// Frames presented so far.
+ static FRAMES: AtomicU64 = AtomicU64::new(0);
+ 
+-#[cfg(feature = "diagnostics")]
++#[cfg(any(windows, feature = "diagnostics"))]
+ pub(crate) fn presented() -> u64 {
+     FRAMES.load(Ordering::Relaxed)
+ }
+ 
++/// Mark a guest presentation and preserve the original power-of-two checkpoints.
++fn mark_present() -> (u64, Option<(u64, u64)>) {
++    let advance = || {
++        let frame = FRAMES.fetch_add(1, Ordering::Relaxed) + 1;
++        (
++            frame,
++            frame.is_power_of_two().then(crate::list::take_counts),
++        )
++    };
++    #[cfg(windows)]
++    if velkin_render::pacing::workload_enabled() {
++        // Only PresentX drains list counters. Serialize snapshots and carry forward
++        // the drained totals, leaving command-recording threads unchanged.
++        static DRAINED: std::sync::Mutex<(u64, u64)> = std::sync::Mutex::new((0, 0));
++        let mut drained = DRAINED.lock().unwrap_or_else(|e| e.into_inner());
++        let (frame, checkpoint) = advance();
++        let pending = checkpoint.unwrap_or_else(crate::list::counts);
++        let totals = (drained.0 + pending.0, drained.1 + pending.1);
++        if checkpoint.is_some() {
++            *drained = totals;
++        }
++        velkin_render::pacing::workload_queue(
++            frame,
++            totals.0,
++            crate::draw::drawn(),
++            totals.1,
++            crate::draw::dispatched(),
++        );
++        return (frame, checkpoint);
++    }
++    advance()
++}
++
+ /// Shows the first plane's first resource in our window.
+ ///
+ /// shortcut: one plane, no scaling or placement, the source expected in
+@@ -1354,7 +1387,7 @@ fn present_now(this: This, planes: u32, plane_parameters: *const Plane) -> HRESU
+     }
+     #[cfg(windows)]
+     crate::framelog::add(crate::framelog::T::PresentLineUs, presenting.elapsed().as_micros() as u64);
+-    let frame = FRAMES.fetch_add(1, Ordering::Relaxed) + 1;
++    let (frame, checkpoint) = mark_present();
+     #[cfg(windows)]
+     if sent_behind && PRESENTS_BEHIND.load(Ordering::Relaxed).is_multiple_of(512) {
+         tracing::info!(
+@@ -1363,8 +1396,7 @@ fn present_now(this: This, planes: u32, plane_parameters: *const Plane) -> HRESU
+             "presents sent behind their queue's line so far (VICTORY_ASYNC_PRESENT=1); the others ran the old way"
+         );
+     }
+-    if frame.is_power_of_two() {
+-        let (draws, dispatches) = crate::list::take_counts();
++    if let Some((draws, dispatches)) = checkpoint {
+         #[cfg(windows)]
+         let (drawn, dispatched) = {
+             static DRAWN: AtomicU64 = AtomicU64::new(0);

@@ -13,8 +13,8 @@ from unicorn import (
 )
 from unicorn import x86_const as x
 
-from kelvaroq_reference.memory import GuestFault
-from kelvaroq_reference.vector import VectorMoves
+from velkin_reference.memory import GuestFault
+from velkin_reference.vector import VectorMoves
 
 
 class PackedIntegerTests(unittest.TestCase):

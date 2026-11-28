@@ -26,10 +26,10 @@ from unicorn.x86_const import (
     UC_X86_REG_YMM4,
 )
 
-from kelvaroq_reference import fma
-from kelvaroq_reference.memory import GuestFault
-from kelvaroq_reference.vector import VectorMoves
-from kelvaroq_reference.vector_extra import scalar_fma
+from velkin_reference import fma
+from velkin_reference.memory import GuestFault
+from velkin_reference.vector import VectorMoves
+from velkin_reference.vector_extra import scalar_fma
 
 
 class BlockBroadcastTests(unittest.TestCase):
@@ -102,9 +102,9 @@ class ScalarFmaTests(unittest.TestCase):
         cpu.reg_write(UC_X86_REG_MXCSR, 0x1F80)
         root = Path(__file__).resolve().parents[2]
         path = os.environ.get(
-            "KELVAROQ_SIMD_LIB", str(root / "target" / "release" / "kelvaroq_simd.dll")
+            "VELKIN_SIMD_LIB", str(root / "target" / "release" / "velkin_simd.dll")
         )
-        with patch.dict(os.environ, {"KELVAROQ_SIMD_LIB": path}):
+        with patch.dict(os.environ, {"VELKIN_SIMD_LIB": path}):
             try:
                 end = VectorMoves().execute(cpu, 0x1000)
             except GuestFault as error:
@@ -188,9 +188,9 @@ class Packed128Tests(unittest.TestCase):
         self.cpu.reg_write(UC_X86_REG_EFLAGS, 0x243)
         root = Path(__file__).resolve().parents[2]
         path = os.environ.get(
-            "KELVAROQ_SIMD_LIB", str(root / "target" / "release" / "kelvaroq_simd.dll")
+            "VELKIN_SIMD_LIB", str(root / "target" / "release" / "velkin_simd.dll")
         )
-        library = patch.dict(os.environ, {"KELVAROQ_SIMD_LIB": path})
+        library = patch.dict(os.environ, {"VELKIN_SIMD_LIB": path})
         library.start()
         self.addCleanup(library.stop)
 

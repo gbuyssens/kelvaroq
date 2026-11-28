@@ -16,7 +16,7 @@ from research.compare_native_frames import (
 
 def line(first, p50=15000):
     return (
-        f"KELVAROQ_FRAME_TIMINGS frames={first}..{first + 30} samples=30 "
+        f"VELKIN_FRAME_TIMINGS frames={first}..{first + 30} samples=30 "
         f"cpu_present_p50_us={p50} cpu_present_p95_us=28000 cpu_present_p99_us=41000\n"
     )
 
